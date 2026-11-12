@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Coinfish Cove</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="game"></div>
+<!-- Shown ONLY if the game never starts (library load failure). -->
+<div id="bootfail" hidden>
+  The game couldn&rsquo;t start &mdash; a file it needs didn&rsquo;t load.
+  Check your connection, then close and reopen this page.
+</div>
+
+<script>
+  // Boot guard: if Phaser never appears, show the message above instead
+  // of a silent blank page.
+  window.__coinfishBoot = { booted: false };
+  window.__coinfishShowFail = function (msg) {
+    var el = document.getElementById("bootfail");
+    if (!el || window.__coinfishBoot.booted) return;
+    el.hidden = false;
+    if (msg) {
+      var p = document.createElement("p");
+      p.style.cssText = "font-size:13px;opacity:.75;word-break:break-word;";
+      p.textContent = String(msg);
+      el.appendChild(p);
+    }
+  };
+  window.addEventListener("error", function (e) {
+    if (window.__coinfishBoot.booted) return;
+    window.__coinfishShowFail(e.message);
+  });
+</script>
+
+<!-- Phaser 3.60, bundled locally. If this copy ever fails to load,
+     js/main.js falls back to the CDN copy (see its boot code). -->
+<script src="assets/phaser.min.js"></script>
+<!-- The game is an ES-module tree rooted here. Module scripts are
+     deferred, so Phaser (a classic script) is always loaded first. -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

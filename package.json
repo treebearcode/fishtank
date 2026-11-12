@@ -1,0 +1,6 @@
+{
+  "name": "coinfish-cove",
+  "private": true,
+  "type": "module",
+  "description": "Coinfish Cove — an Insaniquarium-inspired browser aquarium game built with Phaser 3."
+}
