@@ -16,7 +16,7 @@
 // instead, and no food is dropped for those clicks.
 
 import { CONFIG } from "../config.js";
-import { resolvePointerTarget, isPoke, isOverSell, robotHitAt } from "../input.js";
+import { resolvePointerTarget, isPoke, isOverSell, robotHitAt, chestHitAt, fishHitAt } from "../input.js";
 import { magnetHoverAt } from "../magnet.js";
 import { sfx } from "../sound.js";
 
@@ -59,6 +59,23 @@ export const inputMixin = {
       this.dragActive = false;
       this._dragOverSell = false;
       this.updateSellButton();
+      return;
+    }
+    // RANDOM EVENTS, checked after fish so a real fish swimming
+    // right on top of a visitor can still be poked or grabbed —
+    // but before the feeder-bot and the water branch, so a click
+    // on a visitor never drops food by mistake.
+    //   Golden Guppy: one click drops its $25 coin (see
+    //   collectGoldenGuppy). It is not a fish — fishHitAt is just
+    //   the right-sized hitbox for it.
+    if (this.goldenGuppy && !this.goldenGuppy.clicked &&
+        fishHitAt(this.goldenGuppy.sprite.x, this.goldenGuppy.sprite.y, pointer.x, pointer.y)) {
+      this.collectGoldenGuppy();
+      return;
+    }
+    //   Treasure chest: one click opens it for its reward.
+    if (this.chest && chestHitAt(this.chest.sprite.x, this.chest.sprite.y, pointer.x, pointer.y)) {
+      this.openChest();
       return;
     }
     // The feeder-bot is a pet, not a fish — clicking it drops no food.

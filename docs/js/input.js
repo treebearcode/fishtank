@@ -60,3 +60,10 @@ export function isOverSell(px, py) {
 export function robotHitAt(robotX, robotY, px, py) {
   return Math.abs(px - robotX) <= 30 && Math.abs(py - robotY) <= 22;
 }
+
+// The random-event treasure chest — a 30x20 half-box around its
+// centre (the sprite is 56x40). Clicking it opens it (see
+// scene/events.js openChest), never drops food.
+export function chestHitAt(chestX, chestY, px, py) {
+  return Math.abs(px - chestX) <= 30 && Math.abs(py - chestY) <= 20;
+}

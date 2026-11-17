@@ -225,6 +225,10 @@ export const uiMixin = {
     this.feedHold = false;
     this.feedHoldTimer = 0;
     this._chomperToastShown = false;
+    // Random events: destroy any visitor and re-arm the event clock
+    // (clearEvents also resets the description bar, which may be
+    // showing a Coin Rush countdown).
+    this.clearEvents();
     for (let i = 0; i < CONFIG.startFish; i++) this.spawnFish(300 + i * 360, 200 + i * 60);
     this.toast("Fresh tank! $200 and 2 small guppies.");
     this.updateShopUI();

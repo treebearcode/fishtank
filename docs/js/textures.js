@@ -464,3 +464,32 @@ export function makeEggTexture(scene) {
   g.destroy();
   return key;
 }
+
+// The RANDOM-EVENT treasure chest — a small wooden chest with a gold
+// band and lock, 56x40. Drawn once like the other textures; the event
+// chest is a single sprite (not the decor-chest Graphics in tank.js).
+export function makeTreasureChestTexture(scene) {
+  const key = "chest-event";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Box.
+  g.fillStyle(0x7a4a21, 1);
+  g.fillRect(8, 18, 40, 18);
+  // Domed lid.
+  g.fillStyle(0x9a6a35, 1);
+  g.fillEllipse(28, 14, 40, 12);
+  g.fillRect(8, 12, 40, 8);
+  // Gold band + lock.
+  g.fillStyle(0xffd23f, 1);
+  g.fillRect(24, 8, 8, 28);
+  g.fillRect(24, 20, 8, 8);
+  g.fillStyle(0x2a1a08, 1);
+  g.fillCircle(28, 24, 2);
+  // Gold coins peeking out of the lid, so it reads as treasure.
+  g.fillStyle(0xffe27a, 1);
+  g.fillCircle(14, 10, 3);
+  g.fillCircle(42, 9, 3);
+  g.generateTexture(key, 56, 40);
+  g.destroy();
+  return key;
+}

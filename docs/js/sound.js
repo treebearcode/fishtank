@@ -31,6 +31,12 @@ export const sfx = {
   denied: function () { beep(180, 140, "square", 0.04); },
   death: function () { beep(220, 220, "sawtooth", 0.05); },
   pop: function () { beep(520, 50, "sine", 0.05); },
+  // The event fanfare — three rising notes when a random event starts.
+  event: function () {
+    beep(660, 90, "sine", 0.08);
+    setTimeout(function () { beep(880, 90, "sine", 0.08); }, 90);
+    setTimeout(function () { beep(1320, 140, "sine", 0.07); }, 180);
+  },
   // The gulp blip when a Chomper eats a baby fish — a low swallow,
   // two notes down.
   gulp: function () { beep(300, 120, "sine", 0.08); setTimeout(function () { beep(170, 110, "sine", 0.06); }, 90); },

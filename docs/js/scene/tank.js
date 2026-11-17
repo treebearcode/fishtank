@@ -18,12 +18,13 @@ import { sfx } from "../sound.js";
 import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
   makePelletTexture, makeDeluxePelletTexture, makeCrabTexture, makeFeederBotTexture,
-  makeBotLightTexture, makeEggTexture,
+  makeBotLightTexture, makeEggTexture, makeTreasureChestTexture,
 } from "../textures.js";
 import { uiMixin } from "./ui.js";
 import { shopMixin } from "./shop.js";
 import { fishMixin } from "./fish.js";
 import { deadfishMixin } from "./deadfish.js";
+import { eventsMixin } from "./events.js";
 import { creaturesMixin } from "./creatures.js";
 import { feedingMixin } from "./feeding.js";
 import { coinsMixin } from "./coins.js";
@@ -100,6 +101,17 @@ export class TankScene extends Phaser.Scene {
     this.dragStartY = 0;
     this.dragStartTime = 0;
     this.dragActive = false;   // true once moved >8px (a grab, not a poke)
+    // RANDOM EVENTS (see scene/events.js): one at a time, never
+    // overlapping. eventTimerSec counts down to the next one;
+    // activeEvent is "guppy" | "rush" | "chest" | null; coinRushSec
+    // is the seconds left of a Coin Rush (0 = inactive); the guppy
+    // and the chest are visitor objects, never in this.fish.
+    this.eventTimerSec = 0;
+    this.activeEvent = null;
+    this.coinRushSec = 0;
+    this._rushShownSec = -1;
+    this.goldenGuppy = null;
+    this.chest = null;
   }
 
   create() {
@@ -156,6 +168,7 @@ export class TankScene extends Phaser.Scene {
     makeFeederBotTexture(this);
     makeBotLightTexture(this);
     makeEggTexture(this);
+    makeTreasureChestTexture(this); // the random-event chest (one sprite)
 
     // --- Decorations: drawn once, hidden until bought. Depth 2 —
     //     behind the fish (depth 5) so fish swim in front of them.
@@ -332,6 +345,7 @@ export class TankScene extends Phaser.Scene {
     this.started = true;
     for (let i = 0; i < CONFIG.startFish; i++) this.spawnFish(300 + i * 360, 200 + i * 60);
     this.startOverlay.destroy();
+    this.resetEventTimer(true); // first random event 60-90s from now
     sfx.pop();
   }
 
@@ -348,6 +362,7 @@ export class TankScene extends Phaser.Scene {
     this.updatePellets(dt);
     this.updateFish(dt);
     this.updateDeadFish(dt, time);
+    this.updateEvents(dt, time);
     this.updateHunting();
     this.updateBreeding(dt);
     this.updateEggs(dt);
@@ -376,6 +391,7 @@ Object.assign(TankScene.prototype,
   shopMixin,
   fishMixin,
   deadfishMixin,
+  eventsMixin,
   creaturesMixin,
   feedingMixin,
   coinsMixin,

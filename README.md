@@ -47,6 +47,11 @@ deploys this repo's `docs/` folder.)
 - **Dead fish:** a starved fish floats belly-up to the surface (grey,
   X eyes), bobs there ~10s, then fades — and live fish that bump into
   it knock it around.
+- **Random events:** one at a time, first 60–90s after Start then every
+  2–4 minutes — a **Golden Guppy** swims across (click it for a $25 coin),
+  a 20s **Coin Rush** (fish drop coins twice as fast, countdown in the
+  description bar), or a **Treasure Chest** that floats up for 12s (click
+  to open: $50, $100, or a free baby guppy — money instead at the cap).
 - **Helpers:** Turbo the snail $200 (collects landed coins, crawls toward
   a sinking coin's landing spot; speed upgrade $150 → 90 px/s), Claws the
   crab $300 (grabs coins while they sink), feeder-bot $400 (a robot pet

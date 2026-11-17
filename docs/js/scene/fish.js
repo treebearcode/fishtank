@@ -287,9 +287,11 @@ export const fishMixin = {
       fish.sprite.setTint(fish.curTint);
       fish.sprite.setAlpha(fish.curAlpha);
 
-      // Coins: only while fed, on the species' own schedule.
+      // Coins: only while fed, on the species' own schedule. During
+      // a Coin Rush (see scene/events.js) the timer ticks twice as
+      // fast, so coins drop twice as often for the rush's 20s.
       if (!hungry) {
-        fish.coinTimer += dt;
+        fish.coinTimer += dt * (this.coinRushSec > 0 ? 2 : 1);
         if (fish.coinTimer >= sp.coinEverySec) {
           fish.coinTimer = 0;
           this.dropCoin(fish);

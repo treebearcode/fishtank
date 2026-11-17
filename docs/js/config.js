@@ -69,6 +69,29 @@ export const CONFIG = {
   deadKnockImpulsePxS: 60, // velocity added by one nudge (px/s)
   deadKnockMaxPxS: 90,    // a dead fish never moves faster than this
   deadKnockDamping: 2.5,  // knock velocity decays by this much per second
+  // RANDOM EVENTS: one at a time, never overlapping. The first lands
+  // 60-90s after Start, then a random 120-240s gap after the previous
+  // event ends. No events before Start, while paused, or while the
+  // goal popup is open (the update loop returns early for all three).
+  eventFirstMinSec: 60,   // first event no earlier than this after Start
+  eventFirstMaxSec: 90,   // ...and no later than this
+  eventGapMinSec: 120,    // gap after an event ends, at the shortest
+  eventGapMaxSec: 240,    // ...at the longest
+  // GOLDEN GUPPY: a rare gold fish swims across once, ~15s on
+  // screen. One click drops a $25 coin, then it swims off (faster);
+  // ignored, it just leaves. It is NOT a real fish — it lives in
+  // its own list, so it can never be grabbed, sold, or counted.
+  goldenGuppyValue: 25,   // $ value of the coin it drops when clicked
+  goldenGuppySec: 15,     // how long the crossing takes (at 70 px/s)
+  goldenGuppySpeedPxS: 70, // swim speed across the tank
+  // COIN RUSH: 20s where every fish drops coins twice as often.
+  coinRushSec: 20,        // how long the rush lasts
+  // TREASURE CHEST: floats up from the floor, bobs 12s; one click
+  // opens it for $50, $100, or a free small guppy (money instead at
+  // the fish cap). Unclicked it sinks away with no reward.
+  chestLifeSec: 12,       // seconds from spawn until it sinks away
+  chestRisePxS: 60,       // how fast it floats up to its bob height
+  chestBobY: 240,         // y it bobs at once it has floated up
 };
 
 // SPECIES TABLE — every buyable fish, in one place.
