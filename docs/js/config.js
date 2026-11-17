@@ -6,6 +6,12 @@ export const CONFIG = {
   height: 540,
   waterBottom: 460,   // y of the shop bar (water is 0..460)
   floorY: 428,        // y where coins land / the snail crawls
+  fishMinY: 100,      // live fish never swim above this — the top
+  // strip is a safe place to drop food without grabbing a fish by
+  // accident. Dead fish are exempt (they bob at the surface, y~56,
+  // and are inert, so clicking one drops food anyway).
+  pelletSinkPxS: 40, // pellets sink at this speed (was 55 — slower
+  // so a pellet dropped in the top strip has time to be noticed)
   startMoney: 200,
   startFish: 2,
   foodCost: 2,        // $ per standard pellet
@@ -56,7 +62,7 @@ export const CONFIG = {
   // there, then fades. Rise speed, bob line, surface life (fade over
   // the last 2s, like a landed coin), and the mild knock physics —
   // a live fish that swims into one nudges it, it never launches.
-  deadRisePxS: 55,        // px/s upward while below the surface
+  deadRisePxS: 40,        // px/s upward while below the surface (was 55)
   deadSurfaceY: 56,       // y the dead fish bobs at (just under the top bar)
   deadSurfaceLifeSec: 10, // seconds bobbing at the surface before fading
   deadKnockRadiusPx: 40,  // a live fish this close nudges a dead fish
@@ -112,7 +118,7 @@ export const DECOR_PANEL = { w: 320, h: 104, cx: 267, cy: 394 };
 // FEEDER-BOT SWIM BAND: the robot swims the upper/mid water only and must
 // NEVER go deeper than y = 300, so the pellets it drops have fall time and
 // fish can intercept them before they hit the floor.
-export const ROBOT_BAND = { minY: 80, maxY: 300, minX: 40, maxX: 920 };
+export const ROBOT_BAND = { minY: 110, maxY: 300, minX: 40, maxX: 920 };
 
 // Coin colours by growth stage (silver / gold / diamond).
 export const COIN_COLORS = [0xc0c8d0, 0xffd23f, 0x7fe7ff];

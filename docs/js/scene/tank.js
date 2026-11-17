@@ -286,12 +286,11 @@ export class TankScene extends Phaser.Scene {
       if (this.paused) this.resetDescText();
     });
 
-    // --- Starting fish.
-    for (let i = 0; i < CONFIG.startFish; i++) this.spawnFish(300 + i * 360, 200 + i * 60);
-
     // --- Start overlay: the game only runs after the player clicks
     //     Start, so the hunger timers don't tick away while they're
-    //     reading.
+    //     reading. No fish exist before Start is clicked — the title
+    //     screen shows only the tank background, title, and button
+    //     (the starting fish are spawned by startGame()).
     this.startOverlay = this.add.container(0, 0);
     const shade = this.add.rectangle(0, 0, CONFIG.width, CONFIG.height, 0x0b2a3a, 0.72).setOrigin(0, 0);
     const title = this.add.text(480, 150, "Coinfish Cove", { fontSize: "52px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0);
@@ -301,11 +300,7 @@ export class TankScene extends Phaser.Scene {
       { fontSize: "20px", color: "#eaf6ff", align: "center", lineSpacing: 10 }).setOrigin(0.5, 0);
     const startBtn = this.add.rectangle(480, 340, 220, 56, 0xffd23f, 1).setInteractive({ useHandCursor: true });
     const startLabel = this.add.text(480, 340, "Start", { fontSize: "24px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
-    startBtn.on("pointerdown", () => {
-      this.started = true;
-      this.startOverlay.destroy();
-      sfx.pop();
-    });
+    startBtn.on("pointerdown", () => this.startGame());
     this.startOverlay.add([shade, title, tagline, startBtn, startLabel]);
 
     // --- Goal popup: hidden until the goal is met. Built once here,
@@ -327,6 +322,17 @@ export class TankScene extends Phaser.Scene {
     this.updateShopUI();
     this.updateTopUI();
     this.updateGoalUI();
+  }
+
+  // --- Start of play: the Start button calls this. The starting
+  //     fish are spawned here, not in create(), so the title screen
+  //     has no fish on it. (resetTank() spawns its own starting fish
+  //     separately — it does not go through this.)
+  startGame() {
+    this.started = true;
+    for (let i = 0; i < CONFIG.startFish; i++) this.spawnFish(300 + i * 360, 200 + i * 60);
+    this.startOverlay.destroy();
+    sfx.pop();
   }
 
   // --- The game loop ---------------------------------------------------------

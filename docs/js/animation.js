@@ -55,6 +55,6 @@ export function postMealDriftTarget(fx, fy, px, py, distPx) {
   const ang = len < 4 ? Math.random() * Math.PI * 2 : Math.atan2(dy, dx);
   return {
     x: Math.max(30, Math.min(CONFIG.width - 30, fx + Math.cos(ang) * distPx)),
-    y: Math.max(48, Math.min(CONFIG.waterBottom - 34, fy + Math.sin(ang) * distPx)),
+    y: Math.max(CONFIG.fishMinY, Math.min(CONFIG.waterBottom - 34, fy + Math.sin(ang) * distPx)),
   };
 }

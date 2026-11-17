@@ -107,6 +107,9 @@ function approx(a, b, eps, msg) {
 }
 
 // Build a live scene with stubbed Phaser, past create(), started.
+// create() spawns no fish — the starting fish arrive via startGame()
+// (the Start button), so makeScene calls it to keep the contract
+// "a running game with its 2 starting guppies".
 function makeScene() {
   const stubs = makeSceneStubs();
   const scene = new G.TankScene();
@@ -117,7 +120,22 @@ function makeScene() {
   scene.textures = stubs.textures;
   scene.make = stubs.make;
   scene.create();
-  scene.started = true;
+  scene.startGame();
+  scene._stubs = stubs;
+  return scene;
+}
+// Build a scene that is still on the title screen: create() ran, but
+// Start was never clicked — no fish, not started.
+function makeTitleScene() {
+  const stubs = makeSceneStubs();
+  const scene = new G.TankScene();
+  scene.add = stubs.add;
+  scene.input = stubs.input;
+  scene.time = stubs.time;
+  scene.tweens = stubs.tweens;
+  scene.textures = stubs.textures;
+  scene.make = stubs.make;
+  scene.create();
   scene._stubs = stubs;
   return scene;
 }
@@ -329,7 +347,7 @@ test("robotHitAt: inside/outside the 30x22 box", () => {
   assert(!G.robotHitAt(480, 180, 480, 210));
 });
 test("ROBOT_BAND never goes deeper than y=300", () => {
-  eq(G.ROBOT_BAND.maxY, 300); eq(G.ROBOT_BAND.minY, 80);
+  eq(G.ROBOT_BAND.maxY, 300); eq(G.ROBOT_BAND.minY, 110);
   eq(G.CONFIG.floorY, 428, "floor is well below the band");
 });
 test("SELL_BOUNDS matches the new Sell position (row 2, col 5)", () => {
@@ -419,8 +437,15 @@ test("V3.6: tailWiggle / fishTiltFor math", () => {
 // ===========================================================================
 // 6. SCENE: CREATE + SPECIES
 // ===========================================================================
-test("scene: create() starts with 2 guppies", () => {
-  const s = makeScene();
+test("scene: create() starts with no fish (title screen)", () => {
+  const s = makeTitleScene();
+  eq(s.started, false, "not started before Start is clicked");
+  eq(s.fish.length, 0, "no fish on the title screen");
+});
+test("scene: startGame() spawns the 2 starting guppies", () => {
+  const s = makeTitleScene();
+  s.startGame();
+  eq(s.started, true, "started after Start");
   eq(s.fish.length, 2);
   assert(s.fish.every((f) => f.species === "guppy"), "start fish are guppies");
 });
@@ -513,6 +538,37 @@ test("scene: starfish wanders in the bottom third", () => {
     st.hungerSec = 5; st.lastFedSec = 5;
   }
   assert(low === picks, "every starfish wander target is >= 300 (got " + low + "/" + picks + ")");
+});
+test("scene: fish never wander into the fish-free top zone", () => {
+  const s = makeScene();
+  const f = s.spawnFish(480, 200, "guppy");
+  let minTarget = Infinity, minY = Infinity;
+  for (let i = 0; i < 40; i++) {
+    f.wanderTimer = 0;
+    step(s, 0.2, () => keepFed(s));
+    minTarget = Math.min(minTarget, f.targetY);
+    minY = Math.min(minY, f.sprite.y);
+  }
+  assert(minTarget >= G.CONFIG.fishMinY, "every wander target is >= fishMinY (min " + minTarget + ")");
+  assert(minY >= G.CONFIG.fishMinY, "fish never swam above fishMinY (min y " + minY + ")");
+});
+test("scene: a live fish above the top zone is clamped back down", () => {
+  const s = makeScene();
+  const f = s.spawnFish(480, 200, "guppy");
+  // Above the zone — e.g. released from a grab up there.
+  f.sprite.y = 50; f.targetY = 50; f.wanderTimer = 100;
+  step(s, 0.1, () => keepFed(s));
+  assert(f.sprite.y >= G.CONFIG.fishMinY, "clamped to y>=fishMinY, got " + f.sprite.y);
+});
+test("scene: pellets sink at 40 px/s", () => {
+  const s = makeScene();
+  s.dropPelletAt(480, 100, 1, false);
+  const p = s.pellets[s.pellets.length - 1];
+  eq(p.vy, G.CONFIG.pelletSinkPxS, "pellet sink speed is the config value");
+  eq(p.vy, 40, "pellets sink at 40 px/s");
+  for (const f of s.fish) f.eatCooldownSec = 999; // nobody eats it mid-test
+  step(s, 1, () => keepFed(s));
+  approx(p.sprite.y, 100 + 40, 1, "sank ~40px in 1s, got " + p.sprite.y);
 });
 test("scene: chomper grows at 4/8 feeds, guppy at 3/6", () => {
   const s = makeScene();
@@ -1588,8 +1644,8 @@ test("hold-to-feed: pellets follow the pointer as it moves", () => {
   const last = s.pellets[s.pellets.length - 1];
   eq(Math.round(last.sprite.x), 200, "latest pellet dropped at the moved pointer");
   // updateFeedHold runs before updatePellets, so a fresh pellet sinks
-  // one frame (55 px/s * 0.1s) before we look at it.
-  assert(Math.abs(last.sprite.y - (300 + 55 * 0.1)) < 1e-9, "latest pellet dropped at the moved y minus one frame of sink: " + last.sprite.y);
+  // one frame (40 px/s * 0.1s) before we look at it.
+  assert(Math.abs(last.sprite.y - (300 + 40 * 0.1)) < 1e-9, "latest pellet dropped at the moved y minus one frame of sink: " + last.sprite.y);
 });
 
 test("hold-to-feed: pointerup ends the hold", () => {
@@ -1759,14 +1815,14 @@ test("dead fish: textures exist for every species", () => {
     assert(gen.includes("fish-dead-" + key), "missing dead texture for " + key);
   }
 });
-test("dead fish: rises to the surface at ~55 px/s, then bobs at y=56", () => {
+test("dead fish: rises to the surface at ~40 px/s, then bobs at y=56", () => {
   const s = makeScene();
   clearLiveFish(s); // no live fish to knock it while it rises
   const d = s.spawnDeadFish("guppy", 480, 400, 0.6);
   step(s, 1);
-  approx(d.sprite.y, 400 - 55, 1, "rose ~55px in 1s, got " + d.sprite.y);
+  approx(d.sprite.y, 400 - 40, 1, "rose ~40px in 1s, got " + d.sprite.y);
   assert(!d.atSurface, "not at the surface yet");
-  step(s, 6); // 400 -> 56 is 344px / 55px/s = ~6.3s total
+  step(s, 8); // 400 -> 56 is 344px / 40px/s = ~8.6s total
   assert(d.atSurface, "reached the surface");
   assert(Math.abs(d.sprite.y - G.CONFIG.deadSurfaceY) < 6, "bobs near y=56, got " + d.sprite.y.toFixed(1));
   assert(d.surfaceSec > 0, "surface timer is ticking");
@@ -1775,7 +1831,7 @@ test("dead fish: bobs ~10s at the surface, fades over the last 2s, then disappea
   const s = makeScene();
   clearLiveFish(s);
   const d = s.spawnDeadFish("guppy", 480, 400, 0.6);
-  step(s, 7); // reach the surface (~6.3s) + a little bob time
+  step(s, 9); // reach the surface (~8.6s) + a little bob time
   assert(d.atSurface, "at the surface before the fade test");
   assert(s.deadFish.includes(d), "still there after 7s");
   eq(d.sprite.alpha, 1, "fully opaque before the fade window");

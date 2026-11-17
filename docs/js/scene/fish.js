@@ -337,10 +337,11 @@ export const fishMixin = {
           fish.targetX = 60 + Math.random() * (CONFIG.width - 120);
           // Starfish prefer the bottom third of the tank, even when
           // wandering — their target y is 300..floor, never the open
-          // water the other species wander in.
+          // water the other species wander in. Other fish wander
+          // 100..360 — never into the fish-free top strip (fishMinY).
           fish.targetY = sp.swimLow
             ? 300 + Math.random() * (CONFIG.waterBottom - 34 - 300)
-            : 60 + Math.random() * 300;
+            : CONFIG.fishMinY + Math.random() * (360 - CONFIG.fishMinY);
           tx = fish.targetX; ty = fish.targetY;
         }
       }
@@ -353,9 +354,13 @@ export const fishMixin = {
         fish.sprite.y += (dy / dist) * step;
         fish.sprite.setFlipX(dx < 0); // face left when swimming left
       }
-      // Keep fish inside the water.
+      // Keep fish inside the water — and never above the fish-free
+      // top strip. This is the backstop for every steering path
+      // (wander, pellet chase, hunt, breeding approach, post-meal
+      // drift, separation): no live fish can end a frame above
+      // fishMinY, even if its target was up there.
       fish.sprite.x = Phaser.Math.Clamp(fish.sprite.x, 30, CONFIG.width - 30);
-      fish.sprite.y = Phaser.Math.Clamp(fish.sprite.y, 48, CONFIG.waterBottom - 34);
+      fish.sprite.y = Phaser.Math.Clamp(fish.sprite.y, CONFIG.fishMinY, CONFIG.waterBottom - 34);
       // Swim animation — tilt follows the swim direction, tail wags
       // faster when chasing food, slower and weaker when hungry.
       // animateFish() applies it all (and the tail).
