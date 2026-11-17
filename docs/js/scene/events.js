@@ -95,6 +95,19 @@ export const eventsMixin = {
       else if (this.activeEvent === "rush") this.updateCoinRush(dt);
       return;
     }
+    // Soft-lock re-check, every tick: the lock can start mid-gap —
+    // the rescue fish starves ~50s after the rescue, while the
+    // scheduler is still counting down the normal 120-240s gap it
+    // armed when the player had a fish. The lock is otherwise only
+    // checked when the timer fires or an event ends, never when the
+    // tank empties, so without this a broke, fishless player waits
+    // minutes for the next rescue. A locked player never waits
+    // longer than the rescue delay; a timer already under it is
+    // left alone, and a non-locked player is untouched.
+    if (this.isSoftLocked() && this.eventTimerSec > CONFIG.rescueDelayMaxSec) {
+      this.eventTimerSec = CONFIG.rescueDelayMinSec +
+        Math.random() * (CONFIG.rescueDelayMaxSec - CONFIG.rescueDelayMinSec);
+    }
     this.eventTimerSec -= dt;
     if (this.eventTimerSec <= 0) {
       // Rescue mode: the next event is always a rescue chest, never

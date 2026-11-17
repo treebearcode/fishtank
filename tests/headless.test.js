@@ -2265,6 +2265,66 @@ test("rescue: after the rescue the scheduler returns to normal gaps", () => {
   assert(!s.isSoftLocked(), "a fish again: not locked");
   assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
     "normal gap in [120, 240] after rescue, got " + s.eventTimerSec.toFixed(1));
+  // ...but the normal gap only holds while the fish lives: once the
+  // rescue fish starves, the scheduler clamps back to a rescue delay
+  // instead of leaving a broke, fishless player waiting out the long gap.
+  const f = s.fish[0];
+  f.hungerSec = 50; // starves on the next frame
+  step(s, 0.5);
+  assert(s.fish.length === 0, "rescue fish starved");
+  assert(s.isSoftLocked(), "empty + $10: locked again");
+  assert(s.eventTimerSec <= G.CONFIG.rescueDelayMaxSec,
+    "timer clamped to a rescue delay, got " + s.eventTimerSec.toFixed(1));
+  step(s, 11);
+  eq(s.activeEvent, "chest", "a second rescue chest fires");
+  assert(s.chest && s.chest.rescue, "still a rescue chest");
+});
+test("rescue: if the rescued fish dies mid-gap, the next rescue chest comes within 10s of the tank emptying", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  // First rescue: open the chest, get the guppy + $10. The scheduler
+  // re-arms to a normal 120-240s gap, because the player has a fish.
+  s.startEvent("chest", true);
+  s.openChest();
+  eq(s.fish.length, 1, "rescue guppy joins");
+  eq(s.money, 10, "$0 topped up to $10");
+  // Let the rescue fish starve — no feeding, no coin collection —
+  // and measure from the moment the tank empties to the next rescue
+  // chest. Before the fix this waited out the long normal gap
+  // (70-190s); after it, the scheduler clamps to a rescue delay.
+  let tEmpty = null, tRescue = null;
+  step(s, 400, (t) => {
+    if (tEmpty === null && s.fish.length === 0) tEmpty = t;
+    if (tEmpty !== null && tRescue === null && s.activeEvent === "chest" && s.chest && s.chest.rescue) tRescue = t;
+  });
+  assert(tEmpty !== null, "the rescue fish starved within the sim");
+  assert(tRescue !== null, "a second rescue chest fired within the sim");
+  const wait = tRescue - tEmpty;
+  assert(wait <= 10, "second rescue within 10s of the tank emptying, took " + wait.toFixed(1) + "s");
+});
+test("rescue: a soft-locked timer already under the rescue delay is not pushed out", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  s.eventTimerSec = 2; // already short — the clamp must leave it alone
+  step(s, 3);
+  eq(s.activeEvent, "chest", "rescue chest still fires on the short timer");
+  assert(s.chest && s.chest.rescue, "still a rescue chest");
+});
+test("rescue: a non-locked player keeps normal gaps (no clamp)", () => {
+  const s = makeScene();
+  // Fish alive, $200: run a normal event, let it end, check the gap.
+  s.startEvent("jelly");
+  step(s, 25, () => keepFed(s)); // jellyfish drifts off (~15-20s)
+  eq(s.activeEvent, null, "jellyfish event ended");
+  assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec - 1 && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
+    "normal gap in [120, 240] after a normal event, got " + s.eventTimerSec.toFixed(1));
+  // 100s more with the tank healthy: still no event — the gap was
+  // not shortened by anything.
+  step(s, 100, () => keepFed(s));
+  eq(s.activeEvent, null, "no event fires early on a normal gap");
+  assert(s.eventTimerSec > 0, "timer still counting down, got " + s.eventTimerSec.toFixed(1));
 });
 test("rescue: a normal chest never pays the rescue reward", () => {
   const s = makeScene();
