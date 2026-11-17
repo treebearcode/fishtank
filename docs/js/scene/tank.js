@@ -294,32 +294,19 @@ export class TankScene extends Phaser.Scene {
     //     reading.
     this.startOverlay = this.add.container(0, 0);
     const shade = this.add.rectangle(0, 0, CONFIG.width, CONFIG.height, 0x0b2a3a, 0.72).setOrigin(0, 0);
-    const title = this.add.text(480, 130, "Coinfish Cove", { fontSize: "52px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0);
-    const howto = this.add.text(480, 210,
-      "Buy fish. Feed them. Collect the coins they drop.\n\n" +
-      "• Click in the water to drop food — Standard $2 (1 feed), Deluxe $5 (2 feeds); hold the click to keep feeding\n" +
-      "• Fish grow after 3 feeds, then 6 — bigger fish drop bigger coins\n" +
-      "  (Chomper grows slower, at 4 and 8 feeds)\n" +
-      "• New fish: Emberfin $250 (fast), Chomper $400 (big coins),\n" +
-      "  Starfish $300 (swims low) — hover any shop button for details\n" +
-      "• Two LARGE fish of the same species, both recently fed, will\n" +
-      "  breed — hearts, then an egg hatches into a baby fish!\n" +
-      "• Click coins before they fade on the floor (10s)\n" +
-      "• Hungry fish go pale and stop dropping coins — feed them!\n" +
-      "• Save $200 for Turbo the snail, $300 for Claws the crab,\n" +
-      "  $400 for the feeder-bot (it drops food for you)\n" +
-      "• Tap a fish to poke it, drag a fish to move it — drag it onto\n" +
-      "  Sell to sell it (price depends on species and size)\n" +
-      "• GOAL: bank $1,000 total and own 3 large fish",
-      { fontSize: "18px", color: "#eaf6ff", align: "center", lineSpacing: 8 }).setOrigin(0.5, 0);
-    const startBtn = this.add.rectangle(480, 430, 220, 56, 0xffd23f, 1).setInteractive({ useHandCursor: true });
-    const startLabel = this.add.text(480, 430, "Start", { fontSize: "24px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    const title = this.add.text(480, 150, "Coinfish Cove", { fontSize: "52px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0);
+    const tagline = this.add.text(480, 225,
+      "Buy fish. Feed them. Collect their coins.\n" +
+      "Goal: bank $1,000 and own 3 large fish.",
+      { fontSize: "20px", color: "#eaf6ff", align: "center", lineSpacing: 10 }).setOrigin(0.5, 0);
+    const startBtn = this.add.rectangle(480, 340, 220, 56, 0xffd23f, 1).setInteractive({ useHandCursor: true });
+    const startLabel = this.add.text(480, 340, "Start", { fontSize: "24px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     startBtn.on("pointerdown", () => {
       this.started = true;
       this.startOverlay.destroy();
       sfx.pop();
     });
-    this.startOverlay.add([shade, title, howto, startBtn, startLabel]);
+    this.startOverlay.add([shade, title, tagline, startBtn, startLabel]);
 
     // --- Goal popup: hidden until the goal is met. Built once here,
     //     shown/hidden by showGoalPopup() / closeGoalPopup(). It pauses
