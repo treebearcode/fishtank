@@ -52,6 +52,17 @@ export const CONFIG = {
   breedPregnantSec: 15,  // the pregnant fish carries the egg this long
   breedEggWaitSec: 20,   // the egg sits on the floor this long before hatching
   breedCooldownSec: 60,  // each parent waits this long after the egg pops
+  // DEAD FISH: a starved fish floats belly-up to the surface, bobs
+  // there, then fades. Rise speed, bob line, surface life (fade over
+  // the last 2s, like a landed coin), and the mild knock physics —
+  // a live fish that swims into one nudges it, it never launches.
+  deadRisePxS: 55,        // px/s upward while below the surface
+  deadSurfaceY: 56,       // y the dead fish bobs at (just under the top bar)
+  deadSurfaceLifeSec: 10, // seconds bobbing at the surface before fading
+  deadKnockRadiusPx: 40,  // a live fish this close nudges a dead fish
+  deadKnockImpulsePxS: 60, // velocity added by one nudge (px/s)
+  deadKnockMaxPxS: 90,    // a dead fish never moves faster than this
+  deadKnockDamping: 2.5,  // knock velocity decays by this much per second
 };
 
 // SPECIES TABLE — every buyable fish, in one place.

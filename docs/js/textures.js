@@ -194,6 +194,85 @@ export function makeFishTailTexture(scene, stage, speciesKey) {
   return key;
 }
 
+// DEAD FISH: a starved fish, belly-up and grey. One texture per
+// species, drawn once like the live bodies: the species' own shape
+// (grey ellipse + its dorsal fin, or the grey star for a starfish)
+// with cartoon X eyes instead of a normal eye. Tailed species get
+// the tail drawn INTO the same texture (narrow point at the body
+// joint, wide fan at the trailing edge — the tailGeometryFor fan,
+// in grey), so a dead fish is a single sprite: it never wags, it
+// just floats. The canvas is 88x40 for tailed fish (the tail fan
+// sticks out 20px past the body's left edge) and 64x40 for the
+// starfish; the body centre is at x=56 (tailed) so the sprite origin
+// can sit on the body, not on the middle of the tail.
+export function makeDeadFishTexture(scene, speciesKey) {
+  const sp = speciesDef(speciesKey);
+  const key = "fish-dead-" + sp.key;
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  const grey = 0x9aa5b1;      // dead grey body
+  const greyDark = 0x7a8a99;  // darker grey for the fin
+  const eyeDark = 0x2a2a2a;   // the X eyes
+  // One X eye: two crossing diagonal bars (fillPoints polygons —
+  // the headless stub has no lineBetween, so no strokes here).
+  const xEye = (x, y) => {
+    g.fillStyle(eyeDark, 1);
+    g.fillPoints([
+      { x: x - 3, y: y - 3 }, { x: x - 1, y: y - 3 },
+      { x: x + 3, y: y + 3 }, { x: x + 1, y: y + 3 },
+    ], true);
+    g.fillPoints([
+      { x: x + 3, y: y - 3 }, { x: x + 1, y: y - 3 },
+      { x: x - 3, y: y + 3 }, { x: x - 1, y: y + 3 },
+    ], true);
+  };
+  if (sp.key === "starfish") {
+    // Grey star, same 5-point polygon as the live body.
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? 19 : 8;
+      const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+      pts.push({ x: 32 + Math.cos(ang) * r, y: 20 + Math.sin(ang) * r });
+    }
+    g.fillStyle(grey, 1);
+    g.fillPoints(pts, true);
+    g.fillStyle(0xffffff, 0.15);
+    g.fillCircle(32, 24, 4);
+    xEye(28, 14);
+    xEye(36, 14);
+    g.generateTexture(key, 64, 40);
+    g.destroy();
+    return key;
+  }
+  // Tailed fish: tail fan first (drawn under the body), then the
+  // body ellipse, then the species' dorsal fin, then the X eye.
+  // Body centre (56, 20), edge at x=36; the tail's narrow point
+  // tucks 2px inside that edge and the fan reaches x=18.
+  const tg = tailGeometryFor(sp.key);
+  g.fillStyle(grey, 1);
+  g.fillTriangle(38, 20, 18, tg.wideTop.y, 18, tg.wideBottom.y);
+  g.fillEllipse(56, 20, 40, 26);
+  // Paler belly, so the grey reads as a fish and not a blob.
+  g.fillStyle(0xffffff, 0.15);
+  g.fillEllipse(56, 26, 30, 10);
+  // Dorsal fin — the species' own silhouette, in darker grey.
+  g.fillStyle(greyDark, 1);
+  if (sp.key === "emberfin" || sp.key === "chomper") {
+    // Jagged / spiky fin (same zigzag as the live body, shifted +24).
+    g.fillPoints([
+      { x: 48, y: 9 }, { x: 51, y: 1 }, { x: 54, y: 6 },
+      { x: 57, y: 0 }, { x: 60, y: 6 }, { x: 63, y: 9 },
+    ], true);
+  } else {
+    g.fillTriangle(50, 8, 62, 8, 56, 0);
+  }
+  // X eye where the live eye sits (head end, right side).
+  xEye(70, 15);
+  g.generateTexture(key, 88, 40);
+  g.destroy();
+  return key;
+}
+
 export function makeCoinTexture(scene, stage) {
   const key = "coin-" + stage;
   if (scene.textures.exists(key)) return key;

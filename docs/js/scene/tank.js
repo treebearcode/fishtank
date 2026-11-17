@@ -16,13 +16,14 @@ import { CONFIG, SPECIES, SPECIES_ORDER, SHOP, SHOP_COL_X, DESC_BAR, DESC_DEFAUL
 import { goalIsMet, countLargeFish } from "../economy.js";
 import { sfx } from "../sound.js";
 import {
-  makeFishBodyTexture, makeFishTailTexture, makeCoinTexture, makeSnailTexture,
+  makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
   makePelletTexture, makeDeluxePelletTexture, makeCrabTexture, makeFeederBotTexture,
   makeBotLightTexture, makeEggTexture,
 } from "../textures.js";
 import { uiMixin } from "./ui.js";
 import { shopMixin } from "./shop.js";
 import { fishMixin } from "./fish.js";
+import { deadfishMixin } from "./deadfish.js";
 import { creaturesMixin } from "./creatures.js";
 import { feedingMixin } from "./feeding.js";
 import { coinsMixin } from "./coins.js";
@@ -34,6 +35,7 @@ export class TankScene extends Phaser.Scene {
     super("TankScene");
     this.money = CONFIG.startMoney;
     this.fish = [];      // { sprite, stage, feeds, hungerSec, coinTimer, ... }
+    this.deadFish = [];  // { sprite, species, vx, vy, surfaceSec, ... } — visual only, never counted
     this.pellets = [];   // { sprite, vy }
     this.coins = [];     // { container, img, value, vy, bottomSec, fading }
     this.bubbles = [];
@@ -144,6 +146,7 @@ export class TankScene extends Phaser.Scene {
         makeFishBodyTexture(this, s, sp.key);
         if (sp.hasTail) makeFishTailTexture(this, s, sp.key);
       }
+      makeDeadFishTexture(this, sp.key); // grey belly-up version, one per species
     }
     for (let s = 0; s < 3; s++) makeCoinTexture(this, s);
     makeSnailTexture(this);
@@ -351,6 +354,7 @@ export class TankScene extends Phaser.Scene {
     this.updateFeederDrop(dt);
     this.updatePellets(dt);
     this.updateFish(dt);
+    this.updateDeadFish(dt, time);
     this.updateHunting();
     this.updateBreeding(dt);
     this.updateEggs(dt);
@@ -378,6 +382,7 @@ Object.assign(TankScene.prototype,
   uiMixin,
   shopMixin,
   fishMixin,
+  deadfishMixin,
   creaturesMixin,
   feedingMixin,
   coinsMixin,

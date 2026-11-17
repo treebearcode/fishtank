@@ -44,6 +44,9 @@ deploys this repo's `docs/` folder.)
 - **Predation:** a LARGE hungry Chomper chases any baby fish within
   ~70px and eats it on contact — babies from breeding are at risk, by
   design. Baby Chompers, grown fish, and eggs are never eaten.
+- **Dead fish:** a starved fish floats belly-up to the surface (grey,
+  X eyes), bobs there ~10s, then fades — and live fish that bump into
+  it knock it around.
 - **Helpers:** Turbo the snail $200 (collects landed coins, crawls toward
   a sinking coin's landing spot; speed upgrade $150 → 90 px/s), Claws the
   crab $300 (grabs coins while they sink), feeder-bot $400 (a robot pet

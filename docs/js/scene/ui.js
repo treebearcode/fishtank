@@ -183,6 +183,7 @@ export const uiMixin = {
   // "Restart / Clear Tank" — back to the start, everything wiped.
   resetTank() {
     for (const fish of this.fish) { fish.sprite.destroy(); if (fish.tail) fish.tail.destroy(); }
+    for (const dead of this.deadFish) dead.sprite.destroy();
     for (const pellet of this.pellets) pellet.sprite.destroy();
     for (const coin of this.coins) coin.container.destroy();
     if (this.snail) this.snail.sprite.destroy();
@@ -191,6 +192,7 @@ export const uiMixin = {
     for (const egg of this.eggs) egg.sprite.destroy();
     if (this.feederBot) { this.feederBot.sprite.destroy(); if (this.feederBot.light) this.feederBot.light.destroy(); }
     this.fish = [];
+    this.deadFish = [];
     this.pellets = [];
     this.coins = [];
     this.snail = null;

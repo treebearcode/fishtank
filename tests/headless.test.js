@@ -1722,6 +1722,144 @@ test("hold-to-feed: 2x speed scales the cadence with everything else", () => {
 });
 
 // ===========================================================================
+// 13. DEAD FISH: float belly-up, bob, fade, get knocked around
+// ===========================================================================
+function killFish(scene, fish) {
+  // Starve one fish to death on the next frame (the other fish are
+  // kept fed by the caller's perStep keepFed).
+  fish.hungerSec = 50;
+  step(scene, 0.2, () => keepFed(scene));
+}
+function clearLiveFish(scene) {
+  for (const f of [...scene.fish]) { f.sprite.destroy(); if (f.tail) f.tail.destroy(); }
+  scene.fish = [];
+}
+test("dead fish: starving spawns one — live fish removed, dead fish present, belly-up", () => {
+  const s = makeScene();
+  const f = s.fish[0];
+  const fx = f.sprite.x, fy = f.sprite.y;
+  killFish(s, f);
+  assert(!s.fish.includes(f), "dead fish leaves the live list");
+  eq(s.fish.length, 1, "one live fish left");
+  eq(s.deadFish.length, 1, "one dead fish spawned");
+  const d = s.deadFish[0];
+  eq(d.species, "guppy");
+  eq(d.sprite.texture, "fish-dead-guppy", "grey dead texture, not the live one");
+  approx(d.sprite.rotation, Math.PI, 1e-9, "belly-up: rotation PI");
+  eq(d.baseScale, 0.6, "dead fish keeps the size it died at");
+  approx(d.sprite.scaleX, 0.6, 1e-9, "sprite scale matches");
+  eq(d.sprite.x, fx, "spawns where the fish died");
+  assert(d.sprite.y < fy, "already rising in the death frame");
+  assert(s.toastText.text.indexOf("starved") >= 0, "death toast still shows: " + s.toastText.text);
+});
+test("dead fish: textures exist for every species", () => {
+  const s = makeScene();
+  const gen = s._stubs.generated;
+  for (const key of ["guppy", "emberfin", "chomper", "starfish"]) {
+    assert(gen.includes("fish-dead-" + key), "missing dead texture for " + key);
+  }
+});
+test("dead fish: rises to the surface at ~55 px/s, then bobs at y=56", () => {
+  const s = makeScene();
+  clearLiveFish(s); // no live fish to knock it while it rises
+  const d = s.spawnDeadFish("guppy", 480, 400, 0.6);
+  step(s, 1);
+  approx(d.sprite.y, 400 - 55, 1, "rose ~55px in 1s, got " + d.sprite.y);
+  assert(!d.atSurface, "not at the surface yet");
+  step(s, 6); // 400 -> 56 is 344px / 55px/s = ~6.3s total
+  assert(d.atSurface, "reached the surface");
+  assert(Math.abs(d.sprite.y - G.CONFIG.deadSurfaceY) < 6, "bobs near y=56, got " + d.sprite.y.toFixed(1));
+  assert(d.surfaceSec > 0, "surface timer is ticking");
+});
+test("dead fish: bobs ~10s at the surface, fades over the last 2s, then disappears", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const d = s.spawnDeadFish("guppy", 480, 400, 0.6);
+  step(s, 7); // reach the surface (~6.3s) + a little bob time
+  assert(d.atSurface, "at the surface before the fade test");
+  assert(s.deadFish.includes(d), "still there after 7s");
+  eq(d.sprite.alpha, 1, "fully opaque before the fade window");
+  step(s, 8.5); // surfaceSec ~8.5-9: inside the 2s fade window
+  assert(d.sprite.alpha < 1 && d.sprite.alpha > 0, "fading, alpha=" + d.sprite.alpha.toFixed(2));
+  assert(s.deadFish.includes(d), "still there while fading");
+  step(s, 2); // surfaceSec past 10: gone
+  assert(!s.deadFish.includes(d), "dead fish removed after ~10s at the surface");
+  assert(d.sprite.destroyed, "sprite destroyed");
+});
+test("dead fish: a live fish swimming into it nudges it (mild, not a launch)", () => {
+  const s = makeScene();
+  const d = s.spawnDeadFish("guppy", 480, 200, 0.6);
+  // Pin one live fish 20px to the LEFT of the dead fish, swimming
+  // into it; park the other far away so it cannot interfere.
+  const pusher = s.fish[0];
+  pusher.sprite.x = 460; pusher.sprite.y = 200;
+  pusher.targetX = 460; pusher.targetY = 200; pusher.wanderTimer = 100;
+  const other = s.fish[1];
+  other.sprite.x = 100; other.sprite.y = 100;
+  other.targetX = 100; other.targetY = 100; other.wanderTimer = 100;
+  step(s, 0.5, () => keepFed(s));
+  assert(d.sprite.x > 490, "knocked sideways: x=" + d.sprite.x.toFixed(1));
+  assert(d.vx > 0, "has knock velocity, vx=" + d.vx.toFixed(1));
+  const speed = Math.hypot(d.vx, d.vy);
+  assert(speed <= G.CONFIG.deadKnockMaxPxS + 1e-9, "never faster than the cap: " + speed.toFixed(1));
+  assert(speed < 200, "a nudge, not a launch: " + speed.toFixed(1) + " px/s");
+});
+test("dead fish: a knock below the surface floats back up (buoyancy)", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const d = s.spawnDeadFish("guppy", 480, 56, 0.6);
+  step(s, 0.5); // reach the surface, start bobbing
+  assert(d.atSurface, "bobbing at the surface");
+  // Shove it down hard, as if a fish knocked it.
+  d.sprite.y = 300; d.vy = 0; d.vx = 0;
+  step(s, 1);
+  assert(d.sprite.y < 300, "buoyancy pulls it back up: y=" + d.sprite.y.toFixed(1));
+  step(s, 5);
+  assert(Math.abs(d.sprite.y - G.CONFIG.deadSurfaceY) < 6, "back bobbing at the surface, y=" + d.sprite.y.toFixed(1));
+});
+test("dead fish: not counted in the live list or the fish cap", () => {
+  const s = makeScene();
+  s.spawnDeadFish("guppy", 480, 200, 0.6);
+  s.spawnDeadFish("chomper", 500, 200, 1.56);
+  eq(s.fish.length, 2, "live fish count unchanged by dead fish");
+  eq(s.deadFish.length, 2, "dead fish tracked separately");
+  // Fill the tank to the live cap: dead fish do not free or take slots.
+  while (s.fish.length < s.maxFishCap()) s.spawnFish(100, 100, "guppy");
+  eq(s.fish.length, s.maxFishCap(), "tank full of LIVE fish");
+  s.money = 5000;
+  const n = s.fish.length;
+  s.buyFish("guppy");
+  eq(s.fish.length, n, "cap still blocks buying with dead fish around");
+  // And a dead fish never joins the live list by itself.
+  assert(!s.fish.some((f) => s.deadFish.includes(f)), "no overlap between the lists");
+});
+test("dead fish: not clickable — a click on one drops food, never grabs", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const d = s.spawnDeadFish("guppy", 480, 200, 0.6);
+  const moneyBefore = s.money;
+  s.onPointerDown({ x: 480, y: 200 });
+  eq(s.dragFish, null, "no grab from a dead fish");
+  eq(s.pellets.length, 1, "the click fell through to open water and dropped food");
+  eq(s.money, moneyBefore - 2, "food paid for");
+  assert(s.deadFish.includes(d), "dead fish untouched by the click");
+});
+test("dead fish: resetTank clears them", () => {
+  const s = makeScene();
+  const d = s.spawnDeadFish("guppy", 480, 200, 0.6);
+  eq(s.deadFish.length, 1);
+  s.resetTank();
+  eq(s.deadFish.length, 0, "dead fish cleared by reset");
+  assert(d.sprite.destroyed, "dead sprite destroyed by reset");
+});
+test("dead fish: config timings match the coin fade idea (~10s at rest)", () => {
+  eq(G.CONFIG.coinBottomLifeSec, 10, "coin floor life is the reference");
+  eq(G.CONFIG.deadSurfaceLifeSec, 10, "dead fish surface life matches it");
+  eq(G.CONFIG.deadKnockRadiusPx, 40, "knock radius 40px");
+  assert(G.CONFIG.deadKnockMaxPxS <= 100, "knock speed cap stays mild");
+});
+
+// ===========================================================================
 // Summary.
 // ===========================================================================
 console.log("\n" + passed + " passed, " + failed + " failed, " + (passed + failed) + " total.");

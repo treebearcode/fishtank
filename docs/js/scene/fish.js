@@ -197,11 +197,17 @@ export const fishMixin = {
       if (fish.gulpSec > 0) fish.gulpSec = Math.max(0, fish.gulpSec - dt);
       const hungry = isHungry(fish.hungerSec);
       if (isDead(fish.hungerSec)) {
-        // Starved: poof of bubbles, a sad sound, and the fish is gone.
+        // Starved: poof of bubbles, a sad sound — and the fish floats
+        // belly-up to the surface as a dead fish instead of just
+        // vanishing (see deadfish.js). The dead fish is purely
+        // visual: it never eats, breeds, or counts toward the cap.
         for (let i = 0; i < 5; i++) this.spawnBubble(fish.sprite.x, fish.sprite.y);
+        const deadX = fish.sprite.x, deadY = fish.sprite.y;
+        const deadSpecies = fish.species, deadScale = fish.baseScale;
         fish.sprite.destroy();
         if (fish.tail) fish.tail.destroy();
         this.fish.splice(this.fish.indexOf(fish), 1);
+        this.spawnDeadFish(deadSpecies, deadX, deadY, deadScale);
         // A dead fish leaves its hearts pair too (its partner stops
         // waiting) — removeBreedPair handles the hearts text.
         this.removeBreedPair(fish);
