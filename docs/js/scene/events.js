@@ -9,12 +9,15 @@
 // active event freezes with everything else.
 //
 // The three events (Victor's cut — Coin Shower and Bubble Storm were
-// dropped: the shower overlaps Coin Rush, the storm felt weak):
-//   Golden Guppy — a rare gold fish swims across once (~15s). One
-//     click drops a $25 coin, then it swims off faster. Ignored, it
-//     just leaves. It is NOT a real fish: it lives in this.goldenGuppy,
-//     never in this.fish, so it can't be grabbed, sold, fed, bred,
-//     hunted, or counted toward the cap.
+// dropped: the shower overlaps Coin Rush, the storm felt weak; the
+// Golden Guppy was later replaced by the Glowing Jellyfish — the gold
+// tint didn't read as gold and the event wasn't obvious):
+//   Glowing Jellyfish — a translucent glowing jellyfish with a
+//     pulsing comic-book starburst behind it drifts across once
+//     (~15s). One click bursts it into five $5 coins ($25 total).
+//     Ignored, it just drifts off. It is NOT a real fish: it lives
+//     in this.jellyfish, never in this.fish, so it can't be grabbed,
+//     sold, fed, bred, hunted, or counted toward the cap.
 //   Coin Rush — 20s where every fish drops coins twice as often
 //     (fish.js multiplies the coin timer while this.coinRushSec > 0).
 //     The description bar shows the countdown while it runs.
@@ -22,21 +25,42 @@
 //     opens it: $50, $100, or a free small guppy (money instead at
 //     the fish cap). Unclicked it sinks away with no reward.
 //
+// RESCUE MODE: if the tank is empty AND the player can't afford the
+// cheapest fish (a guppy, $100), the game is soft-locked — no income
+// exists. The scheduler then fires a guaranteed rescue chest every
+// 5-10s until the player has a fish again. A rescue chest always
+// holds a free baby guppy, plus it tops money up to $10 (never +$10)
+// — five pellets of runway, so the rescued fish doesn't just starve
+// because the player can't afford food either.
+//
 // Every event announces itself with a toast + the event fanfare, so
 // it can't be missed while you're looking at the shop.
 
-import { CONFIG } from "../config.js";
+import { CONFIG, SPECIES } from "../config.js";
 import { addMoney, moneyFmt } from "../economy.js";
-import { tailJointFor, tailRotationFor } from "../animation.js";
 import { sfx } from "../sound.js";
 
-const EVENT_KINDS = ["guppy", "rush", "chest"];
+const EVENT_KINDS = ["jelly", "rush", "chest"];
 
 export const eventsMixin = {
+  // Soft-lock check: no fish AND the player can't afford the
+  // cheapest fish (a guppy). No income exists in that state, so the
+  // scheduler switches to rescue mode (see resetEventTimer).
+  isSoftLocked() {
+    return this.fish.length === 0 && this.money < SPECIES.guppy.cost;
+  },
+
   // (Re)arm the scheduler. first=true after Start / Reset: the
   // first event comes 60-90s in. Otherwise a random 120-240s gap
-  // after the event that just ended.
+  // after the event that just ended. In rescue mode (soft-locked)
+  // the next event is a rescue chest in 5-10s instead — the normal
+  // gap would leave a broke, fishless player waiting minutes.
   resetEventTimer(first) {
+    if (this.isSoftLocked()) {
+      this.eventTimerSec = CONFIG.rescueDelayMinSec +
+        Math.random() * (CONFIG.rescueDelayMaxSec - CONFIG.rescueDelayMinSec);
+      return;
+    }
     this.eventTimerSec = first
       ? CONFIG.eventFirstMinSec + Math.random() * (CONFIG.eventFirstMaxSec - CONFIG.eventFirstMinSec)
       : CONFIG.eventGapMinSec + Math.random() * (CONFIG.eventGapMaxSec - CONFIG.eventGapMinSec);
@@ -44,12 +68,12 @@ export const eventsMixin = {
 
   // Destroy any active event objects and re-arm the timer. Called
   // by resetTank() — a fresh tank starts the event clock over, with
-  // no leftover guppy or chest floating around.
+  // no leftover jellyfish or chest floating around.
   clearEvents() {
-    if (this.goldenGuppy) {
-      this.goldenGuppy.sprite.destroy();
-      if (this.goldenGuppy.tail) this.goldenGuppy.tail.destroy();
-      this.goldenGuppy = null;
+    if (this.jellyfish) {
+      this.jellyfish.sprite.destroy();
+      if (this.jellyfish.burst) this.jellyfish.burst.destroy();
+      this.jellyfish = null;
     }
     if (this.chest) {
       this.chest.sprite.destroy();
@@ -66,102 +90,116 @@ export const eventsMixin = {
   // the active event while one runs.
   updateEvents(dt, time) {
     if (this.activeEvent) {
-      if (this.activeEvent === "guppy") this.updateGoldenGuppy(dt, time);
+      if (this.activeEvent === "jelly") this.updateJellyfish(dt, time);
       else if (this.activeEvent === "chest") this.updateChest(dt, time);
       else if (this.activeEvent === "rush") this.updateCoinRush(dt);
       return;
     }
     this.eventTimerSec -= dt;
     if (this.eventTimerSec <= 0) {
-      this.startEvent(EVENT_KINDS[Math.floor(Math.random() * EVENT_KINDS.length)]);
+      // Rescue mode: the next event is always a rescue chest, never
+      // a random pick — a Coin Rush does nothing with no fish, and a
+      // jellyfish's $25 still leaves the player short of a $100 guppy.
+      if (this.isSoftLocked()) this.startEvent("chest", true);
+      else this.startEvent(EVENT_KINDS[Math.floor(Math.random() * EVENT_KINDS.length)]);
     }
   },
 
   // Start one event by kind (also the test hook — the scheduler
   // picks randomly, tests pick directly). Sets activeEvent, announces
-  // it, and builds the event's objects.
-  startEvent(kind) {
+  // it, and builds the event's objects. rescue=true only ever comes
+  // from the scheduler's rescue branch, for a rescue chest.
+  startEvent(kind, rescue = false) {
     this.activeEvent = kind;
-    if (kind === "guppy") this.spawnGoldenGuppy();
+    if (kind === "jelly") this.spawnJellyfish();
     else if (kind === "rush") this.startCoinRush();
-    else if (kind === "chest") this.spawnChest();
+    else if (kind === "chest") this.spawnChest(rescue);
   },
 
   // An event is over: clear the flag and re-arm the gap timer. The
   // per-event updater calls this when its object leaves / expires.
+  // Re-arming checks the soft-lock, so a rescue that just ended
+  // goes back to the normal gap once the player has a fish again —
+  // and an ignored rescue chest is followed by another one in 5-10s.
   endEvent() {
     this.activeEvent = null;
     this.resetEventTimer(false);
   },
 
-  // --- GOLDEN GUPPY -------------------------------------------------------
-  // A medium guppy's body + tail, tinted gold, slightly larger than
-  // life. It swims straight across at 70 px/s (a ~15s crossing) at a
-  // random height, with a gentle bob and a wagging tail. It swims
-  // either way across — left-to-right or right-to-left.
-  spawnGoldenGuppy() {
+  // --- GLOWING JELLYFISH --------------------------------------------------
+  // A translucent glowing jellyfish with a pulsing comic-book
+  // starburst behind it. It drifts straight across at 70 px/s (a
+  // ~15s crossing) at a random height, either direction. The bell
+  // contracts and expands as it swims (jellyfish swimming IS a
+  // pulse), and the starburst pulses in sync — scale and alpha
+  // breathing in and out — so the whole thing throbs and can't be
+  // missed or mistaken for a normal fish.
+  spawnJellyfish() {
     const dir = Math.random() < 0.5 ? 1 : -1;
     const baseY = 140 + Math.random() * 180; // 140..320 — mid-water, never the top strip
     const x = dir > 0 ? -50 : CONFIG.width + 50;
-    const scale = 1.1;
-    const tail = this.add.image(x, baseY, "fish-tail-guppy-1").setOrigin(1, 0.5).setDepth(5);
-    const sprite = this.add.image(x, baseY, "fish-body-guppy-1").setDepth(5);
-    sprite.setScale(scale, scale);
-    sprite.setTint(0xffd23f);
-    tail.setScale(scale, scale);
-    tail.setTint(0xffd23f);
-    this.goldenGuppy = {
-      sprite, tail, dir, baseY, scale,
-      clicked: false, // one click only — the $25 coin drops once
+    const burst = this.add.image(x, baseY, "jelly-burst").setDepth(4);
+    burst.setAlpha(0.55);
+    const sprite = this.add.image(x, baseY, "jellyfish").setDepth(5);
+    this.jellyfish = {
+      sprite, burst, dir, baseY,
+      clicked: false, // one click only — it bursts once
       ageSec: 0,
       bobPhase: Math.random() * Math.PI * 2,
-      wigglePhase: Math.random() * Math.PI * 2,
+      pulsePhase: 0, // bell/burst pulse, advances with dt (see update)
     };
-    this.toast("✨ A Golden Guppy is visiting! Click it for a $25 coin!");
+    this.toast("🪼 A glowing jellyfish drifts in! Click it — it bursts into coins!");
     sfx.event();
   },
 
-  updateGoldenGuppy(dt, time) {
-    const g = this.goldenGuppy;
-    if (!g) { this.endEvent(); return; }
-    g.ageSec += dt;
-    // Clicked guppies hurry off at double speed — the reward is
-    // already dropped, the visit is over.
-    const speed = CONFIG.goldenGuppySpeedPxS * (g.clicked ? 2 : 1);
-    g.sprite.x += g.dir * speed * dt;
-    // Gentle bob and tail wag, like a real fish's animateFish but
-    // without the full fish object (this is a visitor, not a fish).
-    g.wigglePhase += dt * 6;
-    const wiggle = Math.sin(g.wigglePhase) * 0.35;
-    g.sprite.y = g.baseY + Math.sin(time / 500 + g.bobPhase) * 4;
-    g.sprite.setFlipX(g.dir < 0);
-    const facingLeft = g.dir < 0;
-    const localX = tailJointFor(facingLeft, g.scale);
-    g.tail.x = g.sprite.x + localX;
-    g.tail.y = g.sprite.y;
-    g.tail.rotation = tailRotationFor(0, wiggle, facingLeft);
-    g.tail.setFlipX(false);
+  updateJellyfish(dt, time) {
+    const j = this.jellyfish;
+    if (!j) { this.endEvent(); return; }
+    j.ageSec += dt;
+    j.sprite.x += j.dir * CONFIG.jellyfishSpeedPxS * dt;
+    // Gentle bob, like a real fish's animateFish but without the
+    // full fish object (this is a visitor, not a fish).
+    j.sprite.y = j.baseY + Math.sin(time / 500 + j.bobPhase) * 4;
+    j.burst.x = j.sprite.x;
+    j.burst.y = j.sprite.y;
+    // Pulse: the bell contracts/expands (wider as it squashes
+    // vertically, like a real jellyfish), and the starburst breathes
+    // in sync — bigger and brighter, then smaller and dimmer.
+    j.pulsePhase += dt * CONFIG.jellyfishPulseRadS;
+    const s = Math.sin(j.pulsePhase);
+    j.sprite.setScale(1 + 0.08 * s, 1 - 0.06 * s);
+    j.burst.setScale(1 + 0.15 * s);
+    j.burst.setAlpha(0.55 + 0.3 * s);
     // Off the far edge (or past its ~15s crossing): the visit ends.
-    if (g.sprite.x < -60 || g.sprite.x > CONFIG.width + 60 || g.ageSec >= CONFIG.goldenGuppySec + 5) {
-      g.sprite.destroy();
-      if (g.tail) g.tail.destroy();
-      this.goldenGuppy = null;
+    if (j.sprite.x < -60 || j.sprite.x > CONFIG.width + 60 || j.ageSec >= CONFIG.jellyfishSec + 5) {
+      j.sprite.destroy();
+      if (j.burst) j.burst.destroy();
+      this.jellyfish = null;
       this.endEvent();
     }
   },
 
-  // The pointer dispatcher calls this when the golden guppy is
-  // clicked (checked BEFORE fish, so a fish behind it is never
-  // grabbed by mistake). One $25 bonus coin at the guppy's spot,
-  // then it hurries off — the click itself never drops food.
-  collectGoldenGuppy() {
-    const g = this.goldenGuppy;
-    if (!g || g.clicked) return;
-    g.clicked = true;
-    this.dropBonusCoin(g.sprite.x, g.sprite.y + 14, CONFIG.goldenGuppyValue);
-    for (let i = 0; i < 5; i++) this.spawnBubble(g.sprite.x, g.sprite.y);
-    this.toast("✨ Golden Guppy! A $25 coin drops!");
+  // The pointer dispatcher calls this when the jellyfish is clicked
+  // (checked BEFORE fish, so a fish behind it is never grabbed by
+  // mistake). It BURSTS: five $5 coins scatter out ($25 total),
+  // bubbles pop, and the jellyfish is gone — the click itself never
+  // drops food.
+  collectJellyfish() {
+    const j = this.jellyfish;
+    if (!j || j.clicked) return;
+    j.clicked = true;
+    const x = j.sprite.x, y = j.sprite.y;
+    const offsets = [-36, -18, 0, 18, 36];
+    for (let i = 0; i < CONFIG.jellyfishCoins; i++) {
+      this.dropBonusCoin(x + offsets[i], y - (i === 2 ? 10 : i % 2 ? 6 : 0), CONFIG.jellyfishCoinValue);
+    }
+    for (let i = 0; i < 5; i++) this.spawnBubble(x, y);
+    j.sprite.destroy();
+    if (j.burst) j.burst.destroy();
+    this.jellyfish = null;
+    this.toast("🪼 Pop! Five $5 coins burst out!");
     sfx.coin();
+    this.endEvent();
   },
 
   // --- COIN RUSH ----------------------------------------------------------
@@ -193,7 +231,9 @@ export const eventsMixin = {
   // Spawns on the floor at a random x, floats up to its bob height,
   // then bobs for the rest of its 12s life. The chest is one sprite
   // (see makeTreasureChestTexture) — no shop/decor involvement.
-  spawnChest() {
+  // rescue=true marks a RESCUE chest (see openChest): it always
+  // holds a free baby guppy plus a money top-up, never a random roll.
+  spawnChest(rescue = false) {
     const x = 100 + Math.random() * (CONFIG.width - 200);
     const sprite = this.add.image(x, CONFIG.floorY, "chest-event").setDepth(5);
     this.chest = {
@@ -202,8 +242,11 @@ export const eventsMixin = {
       bobPhase: Math.random() * Math.PI * 2,
       bobY: CONFIG.chestBobY, // height it floats up to before bobbing
       rising: true,           // still floating up from the floor
+      rescue,                 // rescue chest: fixed reward, see openChest
     };
-    this.toast("💰 A treasure chest floats up! Click it to open!");
+    this.toast(rescue
+      ? "🛟 Your tank is empty — a rescue chest is on its way! Open it for a free guppy!"
+      : "💰 A treasure chest floats up! Click it to open!");
     sfx.event();
   },
 
@@ -243,14 +286,39 @@ export const eventsMixin = {
 
   // The pointer dispatcher calls this when the chest is clicked.
   // Exactly one reward, then the chest is gone.
+  //   RESCUE chest: always a free small guppy, plus money topped up
+  //   to $10 if below it — never +$10, so it can't be farmed by
+  //   letting fish die. The top-up is five pellets of runway: a fed
+  //   guppy earns ~$5 per $2 pellet, so after the first feeds the
+  //   player is self-sustaining and the loop can't repeat. The
+  //   top-up is a grant, not collected income, so it does NOT count
+  //   toward totalBanked (goal progress). A rescue chest is only
+  //   ever spawned while the tank is empty, so the fish cap can't
+  //   block the free guppy.
   openChest() {
     const c = this.chest;
     if (!c) return;
-    const reward = this.chestRewardFor(Math.random(), this.fish.length >= this.maxFishCap());
     const x = c.sprite.x, y = c.sprite.y;
     c.sprite.destroy();
     this.chest = null;
     for (let i = 0; i < 5; i++) this.spawnBubble(x, y);
+    if (c.rescue) {
+      this.spawnFish(x, y, "guppy");
+      let topped = 0;
+      if (this.money < CONFIG.rescueMoneyTopUp) {
+        topped = CONFIG.rescueMoneyTopUp - this.money;
+        this.money = addMoney(this.money, topped); // lands exactly on $10
+      }
+      this.toast(topped > 0
+        ? "🛟 Rescue! A free baby guppy joins your tank — plus " + moneyFmt(topped) + " for food!"
+        : "🛟 Rescue! A free baby guppy joins your tank!");
+      this.updateShopUI();
+      this.updateTopUI();
+      sfx.buy();
+      this.endEvent();
+      return;
+    }
+    const reward = this.chestRewardFor(Math.random(), this.fish.length >= this.maxFishCap());
     if (reward.type === "money") {
       this.money = addMoney(this.money, reward.value);
       this.totalBanked = addMoney(this.totalBanked, reward.value);

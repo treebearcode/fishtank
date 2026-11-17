@@ -65,12 +65,12 @@ export const inputMixin = {
     // right on top of a visitor can still be poked or grabbed —
     // but before the feeder-bot and the water branch, so a click
     // on a visitor never drops food by mistake.
-    //   Golden Guppy: one click drops its $25 coin (see
-    //   collectGoldenGuppy). It is not a fish — fishHitAt is just
+    //   Glowing Jellyfish: one click bursts it into five $5 coins
+    //   (see collectJellyfish). It is not a fish — fishHitAt is just
     //   the right-sized hitbox for it.
-    if (this.goldenGuppy && !this.goldenGuppy.clicked &&
-        fishHitAt(this.goldenGuppy.sprite.x, this.goldenGuppy.sprite.y, pointer.x, pointer.y)) {
-      this.collectGoldenGuppy();
+    if (this.jellyfish && !this.jellyfish.clicked &&
+        fishHitAt(this.jellyfish.sprite.x, this.jellyfish.sprite.y, pointer.x, pointer.y)) {
+      this.collectJellyfish();
       return;
     }
     //   Treasure chest: one click opens it for its reward.

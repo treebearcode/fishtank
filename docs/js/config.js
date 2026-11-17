@@ -77,13 +77,28 @@ export const CONFIG = {
   eventFirstMaxSec: 90,   // ...and no later than this
   eventGapMinSec: 120,    // gap after an event ends, at the shortest
   eventGapMaxSec: 240,    // ...at the longest
-  // GOLDEN GUPPY: a rare gold fish swims across once, ~15s on
-  // screen. One click drops a $25 coin, then it swims off (faster);
-  // ignored, it just leaves. It is NOT a real fish — it lives in
-  // its own list, so it can never be grabbed, sold, or counted.
-  goldenGuppyValue: 25,   // $ value of the coin it drops when clicked
-  goldenGuppySec: 15,     // how long the crossing takes (at 70 px/s)
-  goldenGuppySpeedPxS: 70, // swim speed across the tank
+  // GLOWING JELLYFISH: drifts across once, ~15s on screen. One
+  // click bursts it into five $5 coins ($25 total); ignored, it
+  // just drifts off. It is NOT a real fish — it lives in its own
+  // object, so it can never be grabbed, sold, or counted. A pulsing
+  // comic-book starburst behind it makes it unmistakable.
+  jellyfishSec: 15,        // how long the crossing takes (at 70 px/s)
+  jellyfishSpeedPxS: 70,   // drift speed across the tank
+  jellyfishCoins: 5,       // how many coins it bursts into when clicked
+  jellyfishCoinValue: 5,   // each burst coin is $5 ($25 total)
+  jellyfishPulseRadS: 3,   // bell/burst pulse speed (radians per second)
+  // RESCUE MODE: if the tank is empty AND the player can't afford
+  // the cheapest fish (a guppy, $100), the game is soft-locked — no
+  // income exists, and a rescue fish alone would starve because the
+  // player can't afford food either. The scheduler then fires a
+  // guaranteed rescue chest every 5-10s until the player has a fish
+  // again; the rescue chest always holds a free baby guppy, plus it
+  // tops money up to $10 (never +$10, so it can't be farmed by
+  // letting fish die) — five pellets of runway, enough to bootstrap
+  // the coin loop.
+  rescueDelayMinSec: 5,    // rescue chest no earlier than this
+  rescueDelayMaxSec: 10,   // ...and no later than this
+  rescueMoneyTopUp: 10,    // rescue tops the wallet up to this
   // COIN RUSH: 20s where every fish drops coins twice as often.
   coinRushSec: 20,        // how long the rush lasts
   // TREASURE CHEST: floats up from the floor, bobs 12s; one click

@@ -1190,6 +1190,17 @@ test("V4.1 scene: tail stays attached at all stages/species, both facings", () =
 });
 test("V4.1 scene: hungry large Chomper eats a baby guppy in range", () => {
   const s = makeScene();
+  // Park the two starting guppies far away and hold them still —
+  // they are stage-0 prey too, and the hunter gets hungry again
+  // right after its first meal, so a wandering starter could
+  // otherwise be eaten as well. That made this test flaky (~1 in 4
+  // runs lost a second fish). The parked spots are 400+px from the
+  // hunter — unreachable in 3s even at 3x chase speed.
+  const spots = [[100, 100], [860, 100]];
+  s.fish.forEach((f, i) => {
+    f.sprite.x = spots[i][0]; f.sprite.y = spots[i][1];
+    f.targetX = spots[i][0]; f.targetY = spots[i][1]; f.wanderTimer = 100;
+  });
   const hunter = largeHungryChomper(s, 480, 400);
   const baby = stillBaby(s, "guppy", 520, 400); // 40px away
   const nBefore = s.fish.length;
@@ -1208,6 +1219,14 @@ test("V4.1 scene: hungry large Chomper eats a baby guppy in range", () => {
 test("V4.1 scene: hungry large Chomper eats baby Emberfin and baby Starfish", () => {
   for (const species of ["emberfin", "starfish"]) {
     const s = makeScene();
+    // Same parking as the guppy test above — the starters are prey
+    // too, and a second meal would overwrite the toast this test
+    // asserts on.
+    const spots = [[100, 100], [860, 100]];
+    s.fish.forEach((f, i) => {
+      f.sprite.x = spots[i][0]; f.sprite.y = spots[i][1];
+      f.targetX = spots[i][0]; f.targetY = spots[i][1]; f.wanderTimer = 100;
+    });
     const hunter = largeHungryChomper(s, 480, 400);
     const baby = stillBaby(s, species, 520, 400);
     step(s, 3);
@@ -1919,13 +1938,13 @@ test("dead fish: config timings match the coin fade idea (~10s at rest)", () => 
 });
 
 // ===========================================================================
-// 14. RANDOM EVENTS: Golden Guppy, Coin Rush, Treasure Chest
+// 14. RANDOM EVENTS: Glowing Jellyfish, Coin Rush, Treasure Chest
 // ===========================================================================
 test("events: no event before Start — the title screen stays quiet", () => {
   const s = makeTitleScene();
   step(s, 300); // 5 minutes of title screen
   eq(s.activeEvent, null, "no active event");
-  eq(s.goldenGuppy, null, "no guppy");
+  eq(s.jellyfish, null, "no jellyfish");
   eq(s.chest, null, "no chest");
   eq(s.coinRushSec, 0, "no rush");
 });
@@ -1935,7 +1954,7 @@ test("events: no event while paused", () => {
   s.eventTimerSec = 0.1; // would fire immediately if the loop ran
   step(s, 200);
   eq(s.activeEvent, null, "paused: scheduler never runs");
-  eq(s.goldenGuppy, null, "no guppy while paused");
+  eq(s.jellyfish, null, "no jellyfish while paused");
 });
 test("events: first event is armed 60-90s after Start", () => {
   const s = makeScene();
@@ -1952,84 +1971,84 @@ test("events: an event fires when the timer expires", () => {
   step(s, 0.2);
   eq(s.activeEvent, null, "not yet");
   step(s, 1);
-  assert(["guppy", "rush", "chest"].includes(s.activeEvent), "an event fired: " + s.activeEvent);
+  assert(["jelly", "rush", "chest"].includes(s.activeEvent), "an event fired: " + s.activeEvent);
 });
 test("events: never more than one active at a time (long sim)", () => {
   const s = makeScene();
   s.eventTimerSec = 0.5; // fire the first one right away
   for (let i = 0; i < 1000; i++) {
     step(s, 0.1, () => keepFed(s));
-    const active = (s.goldenGuppy ? 1 : 0) + (s.chest ? 1 : 0) + (s.coinRushSec > 0 ? 1 : 0);
+    const active = (s.jellyfish ? 1 : 0) + (s.chest ? 1 : 0) + (s.coinRushSec > 0 ? 1 : 0);
     assert(active <= 1, "overlap at t=" + (i * 0.1).toFixed(1) + "s: " + active + " active");
-    assert(s.activeEvent === null || ["guppy", "rush", "chest"].includes(s.activeEvent), "bad activeEvent: " + s.activeEvent);
+    assert(s.activeEvent === null || ["jelly", "rush", "chest"].includes(s.activeEvent), "bad activeEvent: " + s.activeEvent);
   }
 });
-test("events: chest texture is generated", () => {
+test("events: chest and jellyfish textures are generated", () => {
   const s = makeScene();
   assert(s._stubs.generated.includes("chest-event"), "missing chest-event texture");
+  assert(s._stubs.generated.includes("jellyfish"), "missing jellyfish texture");
+  assert(s._stubs.generated.includes("jelly-burst"), "missing jelly-burst texture");
 });
 
-// --- Golden Guppy ---
-test("golden guppy: visits as a gold-tinted guppy, never a real fish", () => {
+// --- Glowing Jellyfish ---
+test("glowing jellyfish: drifts in with its pulsing starburst, never a real fish", () => {
   const s = makeScene();
-  s.startEvent("guppy");
-  eq(s.activeEvent, "guppy", "guppy event active");
-  const g = s.goldenGuppy;
-  assert(g, "guppy object exists");
-  eq(g.sprite.texture, "fish-body-guppy-1", "reuses the guppy body texture");
-  eq(g.sprite.tint, 0xffd23f, "gold tint");
+  s.startEvent("jelly");
+  eq(s.activeEvent, "jelly", "jellyfish event active");
+  const j = s.jellyfish;
+  assert(j, "jellyfish object exists");
+  eq(j.sprite.texture, "jellyfish", "jellyfish texture");
+  assert(j.burst, "starburst object exists");
+  eq(j.burst.texture, "jelly-burst", "starburst texture");
   eq(s.fish.length, 2, "live fish count unchanged");
-  assert(!s.fish.some((f) => f.sprite === g.sprite), "guppy is not in the live list");
+  assert(!s.fish.some((f) => f.sprite === j.sprite), "jellyfish is not in the live list");
 });
-test("golden guppy: one click drops exactly one $25 coin, no food, no grab", () => {
+test("glowing jellyfish: bell and burst pulse in sync", () => {
   const s = makeScene();
-  s.startEvent("guppy");
-  const g = s.goldenGuppy;
+  s.startEvent("jelly");
+  const j = s.jellyfish;
+  eq(j.pulsePhase, 0, "pulse starts at 0");
+  eq(j.sprite.scaleX, 1, "bell starts unscaled");
+  eq(j.burst.scaleX, 1, "burst starts unscaled");
+  eq(j.burst.alpha, 0.55, "burst starts dim");
+  step(s, 0.5);
+  approx(j.pulsePhase, 1.5, 0.01, "pulse phase advanced 0.5s * 3 rad/s");
+  assert(Math.abs(j.sprite.scaleX - 1) > 0.05, "bell scale breathed, got " + j.sprite.scaleX.toFixed(3));
+  assert(Math.abs(j.burst.scaleX - 1) > 0.1, "burst scale breathed, got " + j.burst.scaleX.toFixed(3));
+  assert(j.burst.alpha > 0.8, "burst brightened with the pulse, got " + j.burst.alpha.toFixed(3));
+});
+test("glowing jellyfish: one click bursts it into five $5 coins, no food, no grab", () => {
+  const s = makeScene();
+  s.startEvent("jelly");
+  const j = s.jellyfish;
   // Park the live fish far away so the click can't hit one instead.
   for (const f of s.fish) { f.sprite.x = 100; f.sprite.y = 100; f.targetX = 100; f.targetY = 100; f.wanderTimer = 100; }
-  g.sprite.x = 480; g.sprite.y = 200; g.baseY = 200;
+  j.sprite.x = 480; j.sprite.y = 200; j.baseY = 200;
+  j.burst.x = 480; j.burst.y = 200;
   const moneyBefore = s.money;
   s.onPointerDown({ x: 480, y: 200 });
-  eq(s.coins.length, 1, "one coin dropped");
-  eq(s.coins[0].value, 25, "the coin is $25");
+  eq(s.coins.length, 5, "five coins burst out");
+  assert(s.coins.every((c) => c.value === 5), "every burst coin is $5");
+  eq(s.coins.reduce((t, c) => t + c.value, 0), 25, "$25 total, like the guppy gave");
   eq(s.pellets.length, 0, "no food dropped by the click");
   eq(s.dragFish, null, "no grab");
-  eq(s.money, moneyBefore, "money only changes when the coin is collected");
-  assert(g.clicked, "guppy marked clicked");
-  // A second click on the same (already clicked) guppy drops no second
-  // coin. Move it away from its dropped coin first — otherwise the
-  // second click would collect that coin (a coin click, not a guppy
-  // click) and the count would read 0. Spent, the guppy is no longer
-  // interactive: the click falls through to open water and drops food.
-  g.sprite.x = 650;
-  s.onPointerDown({ x: 650, y: 200 });
-  eq(s.coins.length, 1, "still exactly one coin");
-  eq(s.pellets.length, 1, "the spent guppy falls through to water");
+  eq(s.money, moneyBefore, "money only changes when the coins are collected");
+  eq(s.jellyfish, null, "the jellyfish burst — it's gone");
+  eq(s.activeEvent, null, "event ended with the burst");
 });
-test("golden guppy: unclicked it swims off after ~15s with no coin", () => {
+test("glowing jellyfish: unclicked it drifts off after ~15s with no coins", () => {
   const s = makeScene();
-  s.startEvent("guppy");
+  s.startEvent("jelly");
   const moneyBefore = s.money;
   step(s, 17, () => keepFed(s));
-  eq(s.goldenGuppy, null, "guppy left");
+  eq(s.jellyfish, null, "jellyfish left");
   eq(s.activeEvent, null, "event ended");
-  // The live fish still drop their normal coins during the visit —
-  // the assertion is only that none of them is the guppy's $25.
-  assert(!s.coins.some((c) => c.value === 25), "no $25 coin when ignored");
+  // The live fish still drop their normal $1 coins during the visit —
+  // the assertion is only that none of them is a $5 burst coin.
+  assert(!s.coins.some((c) => c.value === 5), "no $5 burst coin when ignored");
   eq(s.money, moneyBefore, "no money when ignored");
   assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
     "gap timer re-armed in [120, 240], got " + s.eventTimerSec.toFixed(1));
-});
-test("golden guppy: clicked it hurries off and the event ends", () => {
-  const s = makeScene();
-  s.startEvent("guppy");
-  const g = s.goldenGuppy;
-  g.sprite.x = 480; g.sprite.y = 200; g.baseY = 200;
-  s.collectGoldenGuppy();
-  assert(g.clicked, "clicked");
-  step(s, 8, () => keepFed(s)); // double speed: 480px to the edge is ~3.5s
-  eq(s.goldenGuppy, null, "hurried off");
-  eq(s.activeEvent, null, "event ended");
 });
 
 // --- Coin Rush ---
@@ -2055,7 +2074,8 @@ test("coin rush: doubles coin drops for 20s, then ends", () => {
 });
 test("coin rush: config timings", () => {
   eq(G.CONFIG.coinRushSec, 20, "20s rush");
-  eq(G.CONFIG.goldenGuppyValue, 25, "$25 guppy coin");
+  eq(G.CONFIG.jellyfishCoins, 5, "jellyfish bursts into 5 coins");
+  eq(G.CONFIG.jellyfishCoinValue, 5, "each burst coin is $5");
 });
 
 // --- Treasure Chest ---
@@ -2138,10 +2158,10 @@ test("chest: at the fish cap every open pays money, never a fish", () => {
 // --- Scheduler / reset ---
 test("events: resetTank clears any active event and re-arms the clock", () => {
   const s = makeScene();
-  s.startEvent("guppy");
-  assert(s.goldenGuppy, "guppy active before reset");
+  s.startEvent("jelly");
+  assert(s.jellyfish, "jellyfish active before reset");
   s.resetTank();
-  eq(s.goldenGuppy, null, "guppy cleared by reset");
+  eq(s.jellyfish, null, "jellyfish cleared by reset");
   eq(s.chest, null, "chest cleared by reset");
   eq(s.coinRushSec, 0, "rush cleared by reset");
   eq(s.activeEvent, null, "no active event after reset");
@@ -2151,6 +2171,118 @@ test("events: resetTank clears any active event and re-arms the clock", () => {
   s.resetTank();
   eq(s.coinRushSec, 0, "rush cleared by reset too");
   eq(s.descBarText.text, G.DESC_DEFAULT_TEXT, "description bar reset");
+});
+
+// --- Rescue mode: the empty-tank soft-lock ---
+// The lock is exactly "no fish AND can't afford the cheapest fish"
+// (a guppy, $100). In that state the scheduler fires a guaranteed
+// rescue chest in 5-10s; the rescue chest always holds a free baby
+// guppy plus a top-up to $10 (never +$10 — it can't be farmed).
+test("rescue: soft-lock is empty tank AND money under $100, nothing else", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  assert(s.isSoftLocked(), "empty + $0 is locked");
+  s.money = 99;
+  assert(s.isSoftLocked(), "empty + $99 is locked");
+  s.money = 100;
+  assert(!s.isSoftLocked(), "empty + $100 can buy a guppy — not locked");
+  s.money = 0;
+  s.spawnFish(480, 200, "guppy");
+  assert(!s.isSoftLocked(), "a live fish means income — not locked, even at $0");
+});
+test("rescue: in rescue mode the scheduler fires a rescue chest in 5-10s", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  s.eventTimerSec = 0.5; // fire right away
+  step(s, 1);
+  eq(s.activeEvent, "chest", "rescue fires a chest");
+  assert(s.chest && s.chest.rescue, "the chest is a rescue chest");
+});
+test("rescue: the next timer is 5-10s while locked, normal once a fish exists", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  s.resetEventTimer(false);
+  assert(s.eventTimerSec >= G.CONFIG.rescueDelayMinSec && s.eventTimerSec <= G.CONFIG.rescueDelayMaxSec,
+    "rescue delay in [5, 10], got " + s.eventTimerSec.toFixed(1));
+  s.spawnFish(480, 200, "guppy");
+  s.resetEventTimer(false);
+  assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
+    "normal gap in [120, 240] once a fish exists, got " + s.eventTimerSec.toFixed(1));
+});
+test("rescue: the rescue chest always gives a free guppy + top-up to $10", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  // $0 -> guppy + $10.
+  s.money = 0;
+  s.startEvent("chest", true);
+  s.openChest();
+  eq(s.fish.length, 1, "a free guppy joins");
+  eq(s.money, 10, "$0 topped up to $10");
+  eq(s.activeEvent, null, "event ended");
+  // $8 -> guppy + $2 top-up (lands on $10, not $18).
+  clearLiveFish(s);
+  s.money = 8;
+  s.startEvent("chest", true);
+  s.openChest();
+  eq(s.fish.length, 1, "another free guppy");
+  eq(s.money, 10, "$8 topped up to $10, not +$10");
+  // $50 -> guppy, money untouched (already above $10).
+  clearLiveFish(s);
+  s.money = 50;
+  s.startEvent("chest", true);
+  s.openChest();
+  eq(s.fish.length, 1, "free guppy at $50 too");
+  eq(s.money, 50, "$50 stays $50 — no top-up needed");
+  // The top-up is a grant, not collected income: it never counts
+  // toward the $1,000 goal.
+  eq(s.totalBanked, 0, "rescue top-up does not count toward the goal");
+});
+test("rescue: an ignored rescue chest is followed by another one quickly", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  s.startEvent("chest", true);
+  step(s, 12.5, () => keepFed(s)); // past the chest's 12s life, unclicked
+  eq(s.chest, null, "first rescue chest sank away");
+  eq(s.activeEvent, null, "event ended");
+  // Re-armed to a rescue delay, minus up to ~0.5s that ticked after
+  // the chest ended mid-step.
+  assert(s.eventTimerSec >= G.CONFIG.rescueDelayMinSec - 1 && s.eventTimerSec <= G.CONFIG.rescueDelayMaxSec,
+    "still locked: next rescue in ~[5, 10], got " + s.eventTimerSec.toFixed(1));
+  step(s, 11); // the next rescue chest fires
+  eq(s.activeEvent, "chest", "a second rescue chest fires");
+  assert(s.chest && s.chest.rescue, "still a rescue chest");
+});
+test("rescue: after the rescue the scheduler returns to normal gaps", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  s.startEvent("chest", true);
+  s.openChest(); // free guppy + $10 — the lock is over
+  assert(!s.isSoftLocked(), "a fish again: not locked");
+  assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
+    "normal gap in [120, 240] after rescue, got " + s.eventTimerSec.toFixed(1));
+});
+test("rescue: a normal chest never pays the rescue reward", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.money = 0;
+  // A normal chest while locked would be a bug — but even if one
+  // spawned, its roll must not top money up to $10 or grant a fish
+  // for free outside the roll. Roll 0.1 pays $50, nothing else.
+  const origRandom = Math.random;
+  try {
+    Math.random = () => 0.1;
+    s.startEvent("chest"); // not a rescue chest
+    s.openChest();
+    eq(s.money, 50, "normal chest roll pays $50");
+    eq(s.fish.length, 0, "no free guppy from a normal chest roll");
+  } finally {
+    Math.random = origRandom;
+  }
 });
 
 // ===========================================================================

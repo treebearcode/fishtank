@@ -493,3 +493,65 @@ export function makeTreasureChestTexture(scene) {
   g.destroy();
   return key;
 }
+
+// The RANDOM-EVENT glowing jellyfish — a translucent pinkish-purple
+// bell with trailing tentacles, 64x84. Drawn once like the other
+// textures; the bell pulses (scale) while it swims, and a starburst
+// sprite behind it (see makeJellyBurstTexture) pulses in sync.
+export function makeJellyfishTexture(scene) {
+  const key = "jellyfish";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Soft glow behind the bell, so it reads as glowing, not flat.
+  g.fillStyle(0xe8b8ff, 0.35);
+  g.fillEllipse(32, 30, 58, 52);
+  // Bell — pinkish-purple dome, translucent.
+  g.fillStyle(0xd98cff, 0.9);
+  g.fillEllipse(32, 30, 48, 40);
+  // Brighter bell top + a white highlight spot.
+  g.fillStyle(0xf0c8ff, 0.9);
+  g.fillEllipse(32, 22, 30, 18);
+  g.fillStyle(0xffffff, 0.85);
+  g.fillEllipse(24, 18, 8, 5);
+  // Frilly oral-arms band under the bell.
+  g.fillStyle(0xc98aff, 0.85);
+  g.fillRect(14, 46, 36, 6);
+  // Tentacles — tapered, trailing below the bell.
+  g.fillStyle(0xe8a8ff, 0.8);
+  for (let i = 0; i < 5; i++) {
+    const tx = 16 + i * 8;
+    g.fillTriangle(tx, 52, tx + 6, 52, tx + 3, 78);
+  }
+  g.generateTexture(key, 64, 84);
+  g.destroy();
+  return key;
+}
+
+// The comic-book starburst behind the jellyfish — straight
+// speed-lines bursting outward from the centre, bright yellow and
+// white on a transparent background, 260x260. The sprite using it
+// pulses (scale + alpha) in sync with the bell, so the whole thing
+// throbs and can't be missed or mistaken for a normal fish.
+export function makeJellyBurstTexture(scene) {
+  const key = "jelly-burst";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  const cx = 130, cy = 130;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const long = i % 2 === 0;
+    const r = long ? 128 : 84;
+    const w = long ? 0.10 : 0.07; // half-angle of the ray
+    g.fillStyle(i % 2 === 0 ? 0xffe27a : 0xffffff, 0.9);
+    g.fillTriangle(
+      cx + Math.cos(a - w) * 18, cy + Math.sin(a - w) * 18,
+      cx + Math.cos(a + w) * 18, cy + Math.sin(a + w) * 18,
+      cx + Math.cos(a) * r, cy + Math.sin(a) * r
+    );
+  }
+  g.fillStyle(0xfff3b0, 1);
+  g.fillCircle(cx, cy, 20);
+  g.generateTexture(key, 260, 260);
+  g.destroy();
+  return key;
+}

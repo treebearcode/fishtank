@@ -30,11 +30,11 @@ export const coinsMixin = {
     this.coins.push(coin);
   },
 
-  // A BONUS coin — a flat $ value not tied to any fish (the Golden
-  // Guppy drops a $25 one when clicked). It uses the biggest coin
-  // art (stage 2, diamond) and sinks/fades exactly like a fish
-  // coin, so the magnet, the snail, and the crab all treat it the
-  // same. No decoration bonus — the value is the value.
+  // A BONUS coin — a flat $ value not tied to any fish (the glowing
+  // jellyfish bursts into five $5 ones when clicked). It uses the
+  // biggest coin art (stage 2, diamond) and sinks/fades exactly like
+  // a fish coin, so the magnet, the snail, and the crab all treat it
+  // the same. No decoration bonus — the value is the value.
   dropBonusCoin(x, y, value) {
     const container = this.add.container(x, y).setDepth(6);
     const img = this.add.image(0, 0, "coin-2");

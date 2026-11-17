@@ -48,10 +48,14 @@ deploys this repo's `docs/` folder.)
   X eyes), bobs there ~10s, then fades — and live fish that bump into
   it knock it around.
 - **Random events:** one at a time, first 60–90s after Start then every
-  2–4 minutes — a **Golden Guppy** swims across (click it for a $25 coin),
+  2–4 minutes — a **Glowing Jellyfish** drifts across with a pulsing
+  comic-book starburst (click it — it bursts into five $5 coins),
   a 20s **Coin Rush** (fish drop coins twice as fast, countdown in the
   description bar), or a **Treasure Chest** that floats up for 12s (click
   to open: $50, $100, or a free baby guppy — money instead at the cap).
+- **Rescue mode:** if the tank is empty and you can't afford a guppy,
+  a rescue chest arrives in 5–10s with a free baby guppy and a top-up
+  to $10 for food — the game never soft-locks.
 - **Helpers:** Turbo the snail $200 (collects landed coins, crawls toward
   a sinking coin's landing spot; speed upgrade $150 → 90 px/s), Claws the
   crab $300 (grabs coins while they sink), feeder-bot $400 (a robot pet

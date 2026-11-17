@@ -19,6 +19,7 @@ import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
   makePelletTexture, makeDeluxePelletTexture, makeCrabTexture, makeFeederBotTexture,
   makeBotLightTexture, makeEggTexture, makeTreasureChestTexture,
+  makeJellyfishTexture, makeJellyBurstTexture,
 } from "../textures.js";
 import { uiMixin } from "./ui.js";
 import { shopMixin } from "./shop.js";
@@ -103,14 +104,14 @@ export class TankScene extends Phaser.Scene {
     this.dragActive = false;   // true once moved >8px (a grab, not a poke)
     // RANDOM EVENTS (see scene/events.js): one at a time, never
     // overlapping. eventTimerSec counts down to the next one;
-    // activeEvent is "guppy" | "rush" | "chest" | null; coinRushSec
-    // is the seconds left of a Coin Rush (0 = inactive); the guppy
+    // activeEvent is "jelly" | "rush" | "chest" | null; coinRushSec
+    // is the seconds left of a Coin Rush (0 = inactive); the jellyfish
     // and the chest are visitor objects, never in this.fish.
     this.eventTimerSec = 0;
     this.activeEvent = null;
     this.coinRushSec = 0;
     this._rushShownSec = -1;
-    this.goldenGuppy = null;
+    this.jellyfish = null;
     this.chest = null;
   }
 
@@ -169,6 +170,8 @@ export class TankScene extends Phaser.Scene {
     makeBotLightTexture(this);
     makeEggTexture(this);
     makeTreasureChestTexture(this); // the random-event chest (one sprite)
+    makeJellyfishTexture(this); // the random-event jellyfish (one sprite)
+    makeJellyBurstTexture(this); // the starburst behind it (one sprite)
 
     // --- Decorations: drawn once, hidden until bought. Depth 2 —
     //     behind the fish (depth 5) so fish swim in front of them.
