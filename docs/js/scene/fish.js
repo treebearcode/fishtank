@@ -32,6 +32,13 @@ export const fishMixin = {
     const fish = {
       sprite, tail, species: sp.key, stage: 0, feeds: 0, hungerSec: 0, coinTimer: 0, glowSec: 0,
       targetX: x, targetY: y, wanderTimer: 0, speed: sp.speed,
+      // TEMPO: this fish's own speed factor (0.85-1.2x species base),
+      // rolled once at spawn — two guppies never swim in lockstep.
+      // SPRINT: sprintSec counts down a food-chase burst, and
+      // sprintCooldownSec the ~3s breather before the next one.
+      // Both tick in updateFish(); see fishSpeed() / endSprint().
+      tempo: CONFIG.tempoMin + Math.random() * (CONFIG.tempoMax - CONFIG.tempoMin),
+      sprintSec: 0, sprintCooldownSec: 0,
       // eatCooldownSec ticks down in updateFish() — a fish that just
       // ate cannot eat again until this hits 0 (the ONLY anti-hogging).
       eatCooldownSec: 0,
@@ -95,8 +102,9 @@ export const fishMixin = {
   //   Swimming: body tilts toward its swim direction (fish.tilt,
   //     smoothed in updateFish), bobs ±2px, and the tail swings
   //     ±wiggleAmp around the body. Tail speed/amplitude are set by
-  //     the caller: faster when chasing food, slower + weaker when
-  //     hungry, fast when fleeing a poke.
+  //     the caller: faster when chasing food or sprinting (the wag
+  //     scales with the fish's actual speed), slower when just fed,
+  //     fast when fleeing a poke.
   //   Grabbed: the body goes vertical, head down (rotation +90°,
   //     flip cleared so it is head-down whichever way it faced), and
   //     struggles — a ±15° wobble at ~8Hz plus a slight squash. The
@@ -175,6 +183,33 @@ export const fishMixin = {
     fish.tail.setAlpha(fish.curAlpha);
   },
 
+  // EFFECTIVE SWIM SPEED — the one place a fish's speed is computed:
+  // species base × this fish's own tempo × its state. Hungry fish
+  // hurry (1.25x — they are looking for food); a fish that just ate
+  // (hungerSec < 5s) drifts lazily (0.9x); anything in between is 1x.
+  // The sprint multiplier is NOT in here — it is applied at the
+  // steering site in updateFish(), only while food-chasing. The
+  // hunt's 3x uses this helper as its base (so a hungry Chomper
+  // hunts a little faster than a fed one); the poke burst still
+  // uses the raw species speed, as before.
+  fishSpeed(fish) {
+    const sp = speciesDef(fish.species);
+    const state = isHungry(fish.hungerSec)
+      ? CONFIG.hungrySpeedMult
+      : (fish.hungerSec < CONFIG.fedSpeedWindowSec ? CONFIG.fedSpeedMult : 1);
+    return sp.speed * (fish.tempo || 1) * state;
+  },
+
+  // End a sprint early (pellet eaten / landed / out of range) and
+  // start the cooldown — a burst never ends for free, so a fish
+  // cannot immediately burst again.
+  endSprint(fish) {
+    if (fish.sprintSec > 0) {
+      fish.sprintSec = 0;
+      fish.sprintCooldownSec = CONFIG.sprintCooldownSec;
+    }
+  },
+
   // THE PER-FISH UPDATE — hunger, death, pregnancy, grab, poke, tint,
   // coin drops, steering, movement, animation. Iterate over a copy —
   // a fish can die (be removed) mid-loop.
@@ -195,6 +230,16 @@ export const fishMixin = {
       if (fish.driftSec > 0) fish.driftSec = Math.max(0, fish.driftSec - dt);
       // The gulp scale pulse ticks down here too.
       if (fish.gulpSec > 0) fish.gulpSec = Math.max(0, fish.gulpSec - dt);
+      // Sprint timers tick with every other timer (2x speed ticks
+      // them twice as fast, like everything else): the burst counts
+      // down, and when it ends the cooldown starts — a fish that
+      // just sprinted cannot burst again for ~3s.
+      if (fish.sprintSec > 0) {
+        fish.sprintSec = Math.max(0, fish.sprintSec - dt);
+        if (fish.sprintSec <= 0) fish.sprintCooldownSec = CONFIG.sprintCooldownSec;
+      } else if (fish.sprintCooldownSec > 0) {
+        fish.sprintCooldownSec = Math.max(0, fish.sprintCooldownSec - dt);
+      }
       const hungry = isHungry(fish.hungerSec);
       if (isDead(fish.hungerSec)) {
         // Starved: poof of bubbles, a sad sound — and the fish floats
@@ -259,25 +304,26 @@ export const fishMixin = {
         continue;
       }
 
-      // Hungry fish: pale, slow, and they stop dropping coins. A fish
+      // Hungry fish: pale, and they stop dropping coins. A fish
       // that just ate a deluxe pellet glows gold briefly — glow
       // overrides the pale tint while it lasts.
       if (fish.glowSec > 0) fish.glowSec -= dt;
-      // Swim speed comes from the species table, halved while hungry,
-      // and a pregnant fish swims ~30% slower on top of that.
+      // Swim speed comes from fishSpeed() — species base × this
+      // fish's tempo × its state (hungry fish hurry, just-fed fish
+      // drift) — and a pregnant fish swims ~30% slower on top.
       const sp = speciesDef(fish.species);
-      let speed = (hungry ? 0.5 : 1) * sp.speed;
+      let speed = this.fishSpeed(fish);
       if (fish.pregnant) speed *= 0.7;
       // PREDATION CHASE: a large, hungry Chomper that has a baby
-      // within ~70px chases it at poke-burst speed (3x base speed —
-      // the same dart feel as a poke), ignoring pellets, drift, and
-      // wander targets while it hunts. The catch itself happens after
-      // the fish loop (updateHunting), so the hunter has to actually
-      // reach the baby — it cannot eat at range.
+      // within ~70px chases it at poke-burst speed (3x its effective
+      // speed — the same dart feel as a poke), ignoring pellets,
+      // drift, and wander targets while it hunts. The catch itself
+      // happens after the fish loop (updateHunting), so the hunter
+      // has to actually reach the baby — it cannot eat at range.
       const huntPrey = (fish.species === "chomper" && fish.stage === 2 && (fish.hungerSec || 0) > 0 && !fish.breeding)
         ? findPrey(fish, this.fish)
         : null;
-      if (huntPrey) speed = sp.speed * 3;
+      if (huntPrey) speed = this.fishSpeed(fish) * 3;
       if (fish.glowSec > 0) {
         fish.curTint = 0xffe27a; fish.curAlpha = 1;
       } else {
@@ -347,6 +393,27 @@ export const fishMixin = {
           tx = fish.targetX; ty = fish.targetY;
         }
       }
+      // DESPERATE SPRINT: chasing a SINKING pellet 40-120px away —
+      // close enough to want, far enough to miss — the fish bursts
+      // to 1.8x for up to 1.5s, then needs a ~3s breather. The burst
+      // ends early if the pellet is eaten, lands, or leaves the
+      // window; a pellet closer than 40px needs no sprint, and one
+      // farther than 120px is just a normal chase. Hunting, drifting,
+      // and breeding never sprint — only the food chase does.
+      let sprinting = false;
+      if (chasing && nearestPellet && !nearestPellet.landed) {
+        const pelletDist = Math.sqrt(nearestD);
+        const inWindow = pelletDist >= CONFIG.sprintMinPx && pelletDist <= CONFIG.sprintMaxPx;
+        if (fish.sprintSec > 0) {
+          if (!inWindow) this.endSprint(fish);
+        } else if (inWindow && fish.sprintCooldownSec <= 0) {
+          fish.sprintSec = CONFIG.sprintMaxSec;
+        }
+        sprinting = fish.sprintSec > 0;
+      } else if (fish.sprintSec > 0) {
+        this.endSprint(fish);
+      }
+      if (sprinting) speed *= CONFIG.sprintMult;
       // Move toward the target at `speed`, then face that way.
       const dx = tx - fish.sprite.x, dy = ty - fish.sprite.y;
       const dist = Math.hypot(dx, dy);
@@ -363,13 +430,16 @@ export const fishMixin = {
       // fishMinY, even if its target was up there.
       fish.sprite.x = Phaser.Math.Clamp(fish.sprite.x, 30, CONFIG.width - 30);
       fish.sprite.y = Phaser.Math.Clamp(fish.sprite.y, CONFIG.fishMinY, CONFIG.waterBottom - 34);
-      // Swim animation — tilt follows the swim direction, tail wags
-      // faster when chasing food, slower and weaker when hungry.
-      // animateFish() applies it all (and the tail).
+      // Swim animation — tilt follows the swim direction, and the
+      // tail wag scales with how fast the fish is actually swimming:
+      // a sprinting fish wags frantically, a lazy just-fed fish
+      // barely bothers. (Hungry fish are FASTER now, so they wag
+      // faster too — the old hungry slowdown is gone with the 0.5x
+      // speed.) animateFish() applies it all (and the tail).
       const tiltTarget = fishTiltFor(dy, dist);
       fish.tilt += (tiltTarget - fish.tilt) * Math.min(1, dt * 8);
-      fish.wiggleFreq = chasing ? 10 : 6;
-      if (hungry) fish.wiggleFreq *= 0.6;
+      const wagRatio = Math.max(0.5, Math.min(2.5, speed / sp.speed));
+      fish.wiggleFreq = (chasing ? 10 : 6) * wagRatio;
       fish.wiggleAmp = hungry ? 0.2 : 0.35;
       this.animateFish(fish, dt);
     }

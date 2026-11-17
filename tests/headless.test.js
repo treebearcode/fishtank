@@ -928,6 +928,9 @@ test("scene: pregnant fish swims ~30% slower", () => {
   for (const f of [mum, plain]) {
     f.hungerSec = 5; f.lastFedSec = 5;
     f.targetX = 800; f.targetY = f.sprite.y; f.wanderTimer = 100;
+    // Pin tempo: the pregnancy ratio is what this test measures,
+    // and two random tempos would make it noise.
+    f.tempo = 1;
   }
   mum.pregnant = true; mum.pregnantSec = 15;
   const x0m = mum.sprite.x, x0p = plain.sprite.x;
@@ -1195,7 +1198,8 @@ test("V4.1 scene: hungry large Chomper eats a baby guppy in range", () => {
   // right after its first meal, so a wandering starter could
   // otherwise be eaten as well. That made this test flaky (~1 in 4
   // runs lost a second fish). The parked spots are 400+px from the
-  // hunter — unreachable in 3s even at 3x chase speed.
+  // hunter — unreachable in 3s even at the fastest chase speed
+  // (3x base x 1.2 tempo = ~108 px/s, ~324px in 3s).
   const spots = [[100, 100], [860, 100]];
   s.fish.forEach((f, i) => {
     f.sprite.x = spots[i][0]; f.sprite.y = spots[i][1];
@@ -2316,10 +2320,17 @@ test("rescue: a non-locked player keeps normal gaps (no clamp)", () => {
   const s = makeScene();
   // Fish alive, $200: run a normal event, let it end, check the gap.
   s.startEvent("jelly");
-  step(s, 25, () => keepFed(s)); // jellyfish drifts off (~15-20s)
+  // Capture the gap the moment the event ends — the timer ticks
+  // down from the 120-240s roll for the rest of the step, so
+  // asserting on the value after a fixed 25s is a race (a low roll
+  // ticks below 120 before the check runs; it failed ~3 in 12 runs
+  // on the pristine tree).
+  let gapAtEnd = null;
+  step(s, 25, () => { keepFed(s); if (gapAtEnd === null && s.activeEvent === null) gapAtEnd = s.eventTimerSec; });
   eq(s.activeEvent, null, "jellyfish event ended");
-  assert(s.eventTimerSec >= G.CONFIG.eventGapMinSec - 1 && s.eventTimerSec <= G.CONFIG.eventGapMaxSec,
-    "normal gap in [120, 240] after a normal event, got " + s.eventTimerSec.toFixed(1));
+  assert(gapAtEnd !== null, "event ended during the step");
+  assert(gapAtEnd >= G.CONFIG.eventGapMinSec && gapAtEnd <= G.CONFIG.eventGapMaxSec,
+    "normal gap in [120, 240] after a normal event, got " + gapAtEnd.toFixed(1));
   // 100s more with the tank healthy: still no event — the gap was
   // not shortened by anything.
   step(s, 100, () => keepFed(s));
@@ -2343,6 +2354,185 @@ test("rescue: a normal chest never pays the rescue reward", () => {
   } finally {
     Math.random = origRandom;
   }
+});
+
+// ===========================================================================
+// 15. DYNAMIC FISH SPEEDS: per-fish tempo, hunger pace, food sprint
+// ===========================================================================
+// One fish, alone in the tank, tempo pinned to 1, mid hunger (10s —
+// neither hungry nor just-fed), steering at a fixed target. The two
+// starting guppies are parked far away with a permanent eat cooldown
+// so they never touch the test pellet.
+function sprintScene() {
+  const s = makeScene();
+  for (const f of s.fish) {
+    f.sprite.x = 100; f.sprite.y = 100;
+    f.targetX = 100; f.targetY = 100; f.wanderTimer = 100;
+    f.eatCooldownSec = 999;
+  }
+  const f = s.spawnFish(480, 150, "guppy");
+  f.tempo = 1;
+  f.hungerSec = 10; f.lastFedSec = 10;
+  f.targetX = 480; f.targetY = 150; f.wanderTimer = 100;
+  return { scene: s, fish: f };
+}
+test("speeds: tuning constants are the agreed numbers", () => {
+  const C = G.CONFIG;
+  eq(C.tempoMin, 0.85); eq(C.tempoMax, 1.2);
+  eq(C.hungrySpeedMult, 1.25); eq(C.fedSpeedMult, 0.9); eq(C.fedSpeedWindowSec, 5);
+  eq(C.sprintMinPx, 40); eq(C.sprintMaxPx, 120);
+  eq(C.sprintMult, 1.8); eq(C.sprintMaxSec, 1.5); eq(C.sprintCooldownSec, 3);
+});
+test("speeds: tempo rolls in [0.85, 1.2] and same-species fish differ", () => {
+  const s = makeScene();
+  const tempos = [];
+  for (let i = 0; i < 30; i++) tempos.push(s.spawnFish(100 + i * 20, 200, "guppy").tempo);
+  for (const t of tempos) assert(t >= G.CONFIG.tempoMin && t <= G.CONFIG.tempoMax, "tempo " + t + " out of range");
+  const spread = Math.max(...tempos) - Math.min(...tempos);
+  assert(spread > 0.05, "30 guppies should not all share one tempo (spread " + spread + ")");
+});
+test("speeds: fishSpeed is base x tempo x state", () => {
+  const s = makeScene();
+  const f = s.spawnFish(480, 200, "guppy");
+  f.tempo = 1;
+  f.hungerSec = 25; // hungry (>= 20s)
+  approx(s.fishSpeed(f), 45 * 1.25, 1e-9, "hungry guppy");
+  f.hungerSec = 2; // just fed (< 5s)
+  approx(s.fishSpeed(f), 45 * 0.9, 1e-9, "just-fed guppy");
+  f.hungerSec = 10; // in between
+  approx(s.fishSpeed(f), 45, 1e-9, "mid-state guppy");
+  f.tempo = 1.2;
+  approx(s.fishSpeed(f), 45 * 1.2, 1e-9, "tempo applies");
+});
+test("speeds: hungry fish outswims a just-fed fish at the same tempo", () => {
+  const s = makeScene();
+  // Clear the starters so separation can't nudge the measurement.
+  clearLiveFish(s);
+  const f = s.spawnFish(100, 200, "guppy");
+  f.tempo = 1;
+  f.targetX = 900; f.targetY = 200; f.wanderTimer = 100;
+  // Hungry: hungerSec 25 (>= 20) — 1.25x.
+  f.hungerSec = 25; f.lastFedSec = 25;
+  const x0 = f.sprite.x;
+  step(s, 1);
+  const dHungry = f.sprite.x - x0;
+  // Just fed: hungerSec 2 (< 5) — 0.9x. Same fish, same tempo.
+  f.sprite.x = 100; f.hungerSec = 2; f.lastFedSec = 2;
+  f.targetX = 900; f.targetY = 200; f.wanderTimer = 100;
+  const x1 = f.sprite.x;
+  step(s, 1);
+  const dFed = f.sprite.x - x1;
+  approx(dHungry, 45 * 1.25, 3, "hungry guppy ~56px in 1s, got " + dHungry);
+  approx(dFed, 45 * 0.9, 3, "just-fed guppy ~40px in 1s, got " + dFed);
+  assert(dHungry > dFed * 1.2, "hungry clearly faster: " + dHungry + " vs " + dFed);
+});
+test("speeds: sprint triggers for a sinking pellet 40-120px away", () => {
+  const { scene: s, fish: f } = sprintScene();
+  s.dropPelletAt(480 + 80, 150, 1, false); // 80px to the right
+  step(s, 0.1);
+  assert(f.sprintSec > 0, "sprint started, sprintSec=" + f.sprintSec);
+  assert(f.wiggleFreq > 15, "wag is frantic while sprinting, wiggleFreq=" + f.wiggleFreq);
+});
+test("speeds: no sprint for a pellet closer than 40px, farther than 120px, or on the floor", () => {
+  // Closer than 40px.
+  let t = sprintScene();
+  t.scene.dropPelletAt(480 + 30, 150, 1, false);
+  step(t.scene, 0.1);
+  eq(t.fish.sprintSec, 0, "30px pellet: no sprint");
+  // Farther than 120px.
+  t = sprintScene();
+  t.scene.dropPelletAt(480 + 200, 150, 1, false);
+  step(t.scene, 0.1);
+  eq(t.fish.sprintSec, 0, "200px pellet: no sprint");
+  // A floor pellet in the window: landed flag set.
+  t = sprintScene();
+  t.scene.dropPelletAt(480 + 80, 150, 1, false);
+  const p = t.scene.pellets[t.scene.pellets.length - 1];
+  p.landed = true; p.vy = 0;
+  step(t.scene, 0.1);
+  eq(t.fish.sprintSec, 0, "landed pellet: no sprint");
+});
+test("speeds: sprint lasts at most 1.5s, then the ~3s cooldown blocks a re-trigger", () => {
+  const { scene: s, fish: f } = sprintScene();
+  s.dropPelletAt(480 + 80, 150, 1, false);
+  const p = s.pellets[s.pellets.length - 1];
+  // Hold the pellet 80px to the right of the fish every frame, so
+  // the window never closes for any other reason — only the timer
+  // can end the burst.
+  const hold = () => { p.sprite.x = f.sprite.x + 80; p.sprite.y = f.sprite.y; };
+  step(s, 0.1, hold);
+  assert(f.sprintSec > 0, "sprint started");
+  step(s, 1.6, hold);
+  eq(f.sprintSec, 0, "burst ended within 1.5s + one frame");
+  assert(f.sprintCooldownSec > 0, "cooldown started, " + f.sprintCooldownSec.toFixed(2) + "s left");
+  // Pellet still in the window, but the cooldown must block a sprint.
+  step(s, 0.2, hold);
+  eq(f.sprintSec, 0, "no re-sprint during cooldown");
+});
+test("speeds: speed returns to normal after the burst, and a sprint can start again after the cooldown", () => {
+  const { scene: s, fish: f } = sprintScene();
+  s.dropPelletAt(480 + 80, 150, 1, false);
+  const p = s.pellets[s.pellets.length - 1];
+  const hold = () => { p.sprite.x = f.sprite.x + 80; p.sprite.y = f.sprite.y; };
+  step(s, 0.1, hold);
+  assert(f.sprintSec > 0, "sprint started");
+  step(s, 1.6, hold);
+  eq(f.sprintSec, 0, "burst over");
+  // Cruise for 0.5s with the pellet still in the window (cooldown
+  // active): back to base speed, not sprint speed.
+  const x0 = f.sprite.x;
+  step(s, 0.5, hold);
+  const dCruise = f.sprite.x - x0;
+  approx(dCruise, 45 * 0.5, 3, "cruising at base speed after the burst, got " + dCruise);
+  // Wait out the cooldown with the pellet still in range: a fresh
+  // sprint must start again.
+  step(s, 3.1, hold);
+  assert(f.sprintSec > 0, "sprint starts again after the cooldown");
+});
+test("speeds: a sprinting starfish is still slow in absolute terms", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const st = s.spawnFish(200, 350, "starfish");
+  st.tempo = 1;
+  st.hungerSec = 10; st.lastFedSec = 10;
+  st.targetX = 200; st.targetY = 350; st.wanderTimer = 100;
+  s.dropPelletAt(280, 350, 1, false);
+  const p = s.pellets[s.pellets.length - 1];
+  const hold = () => { p.sprite.x = st.sprite.x + 80; p.sprite.y = st.sprite.y; };
+  step(s, 0.1, hold);
+  assert(st.sprintSec > 0, "starfish sprints");
+  const x0 = st.sprite.x;
+  step(s, 0.5, hold);
+  const d = st.sprite.x - x0;
+  approx(d, 25 * 1.8 * 0.5, 3, "sprinting starfish ~22.5px in 0.5s, got " + d);
+  assert(d < 30, "starfish burst stays slow in absolute terms");
+});
+test("speeds: tail wag is faster during a sprint than at rest", () => {
+  const { scene: s, fish: f } = sprintScene();
+  // At rest (wandering, no pellet): wag is the base 6 x speed ratio.
+  step(s, 0.1);
+  const restFreq = f.wiggleFreq;
+  // Now a pellet in the window: sprinting wag.
+  s.dropPelletAt(f.sprite.x + 80, f.sprite.y, 1, false);
+  step(s, 0.1);
+  assert(f.sprintSec > 0, "sprint started");
+  assert(f.wiggleFreq > restFreq * 2, "sprint wag " + f.wiggleFreq + " vs rest wag " + restFreq);
+});
+test("speeds: the hunt is still 3x the hunter's effective speed", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const hunter = s.spawnFish(400, 200, "chomper");
+  hunter.feeds = 8; hunter.stage = 2; s.setFishStageVisual(hunter);
+  hunter.tempo = 1; hunter.hungerSec = 25; hunter.lastFedSec = 25;
+  const baby = s.spawnFish(460, 200, "guppy");
+  baby.targetX = 460; baby.targetY = 200; baby.wanderTimer = 100;
+  // 0.2s at 30 x 1.25 x 3 = 112.5px/s closes 22.5px of the 60px
+  // gap — the baby is still alive, the hunter just got faster.
+  const x0 = hunter.sprite.x;
+  step(s, 0.2);
+  const d = hunter.sprite.x - x0;
+  approx(d, 30 * 1.25 * 3 * 0.2, 3, "hunting chomper ~22.5px in 0.2s, got " + d);
+  assert(s.fish.includes(baby), "baby still alive after 0.2s");
 });
 
 // ===========================================================================

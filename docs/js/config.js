@@ -53,6 +53,21 @@ export const CONFIG = {
   robotSpeed: 35,      // px/s, gentle — it is a pet, not a hunter
   hungryAfterSec: 20,  // seconds without food before a fish is hungry
   diesAfterSec: 50,    // seconds without food before a fish dies
+  // DYNAMIC FISH SPEEDS: every fish has its own tempo, speed follows
+  // hunger, and a fish chasing a sinking pellet that is just out of
+  // reach bursts into a desperate sprint (see fishSpeed() in
+  // scene/fish.js). The sprint is a feel change, not an economy one:
+  // food, hunger, and coin timers are untouched.
+  tempoMin: 0.85,      // per-fish speed factor, slowest (rolled at spawn)
+  tempoMax: 1.2,       // ...fastest — same species, different fish
+  hungrySpeedMult: 1.25, // a hungry fish hurries — it is looking for food
+  fedSpeedMult: 0.9,   // a fish that just ate drifts lazily
+  fedSpeedWindowSec: 5, // "just ate" means hungerSec under this
+  sprintMinPx: 40,     // sprint only when the pellet is at least this far
+  sprintMaxPx: 120,    // ...and no farther than this (else a normal chase)
+  sprintMult: 1.8,     // burst speed multiplier
+  sprintMaxSec: 1.5,   // a burst lasts at most this long
+  sprintCooldownSec: 3, // ...then this long before it can sprint again
   coinBottomLifeSec: 10, // seconds a landed coin sits there before fading
   breedHeartsSec: 3,     // hearts animation while a pair swims together
   breedPregnantSec: 15,  // the pregnant fish carries the egg this long

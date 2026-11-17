@@ -35,7 +35,11 @@ export const feedingMixin = {
     const px = Phaser.Math.Clamp(x, 20, CONFIG.width - 20);
     const py = Phaser.Math.Clamp(y, 44, CONFIG.waterBottom - 30);
     const sprite = this.add.image(px, py, deluxe ? "pellet-deluxe" : "pellet").setDepth(3);
-    const pellet = { sprite, vy: CONFIG.pelletSinkPxS, feeds: feeds || 1, deluxe: !!deluxe };
+    const pellet = { sprite, vy: CONFIG.pelletSinkPxS, feeds: feeds || 1, deluxe: !!deluxe, landed: false };
+    // landed is always false here — pellets sink and are destroyed
+    // at the floor, never sit on it — but the flag exists so the
+    // desperate-sprint check can tell a sinking pellet from a floor
+    // one (see updateFish in scene/fish.js).
     this.pellets.push(pellet);
     // No claims — the pellet is free for any eligible fish to eat
     // (see updatePellets).

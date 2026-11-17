@@ -32,6 +32,11 @@ deploys this repo's `docs/` folder.)
   eat cooldown is the only anti-hogging. Overlapping fish drift apart,
   and a fish that just ate drifts away so the next pellet reaches a
   hungry fish.
+- **Dynamic speeds:** every fish rolls its own tempo (0.85–1.2× species
+  speed) at spawn, hungry fish hurry (1.25×) while just-fed fish drift
+  lazily (0.9×), and a fish chasing a sinking pellet 40–120px away
+  bursts into a 1.8× desperate sprint (up to 1.5s, then a ~3s breather)
+  — tail wag speeds up with the fish.
 - **Growth:** 3 feeds = medium, 6 = large (Chomper: 4 and 8). Bigger fish
   drop bigger coins. A baby renders at ~half an adult size (0.6 / 0.9 /
   1.2 growth scales × species size).
@@ -131,7 +136,7 @@ deploys this repo's `docs/` folder.)
   water (never deeper than y=300) and drops a Standard pellet every
   **15s** for $2 each, right where it is — it pauses if you're broke
   or fishless.
-- Fish get **hungry after ~20 seconds** without food: they slow down, go
+- Fish get **hungry after ~20 seconds** without food: they hurry, go
   pale, and stop dropping coins. After **~30 more seconds** unfed, they die.
 - **Shop (bottom bar, two rows of 9):** hover any button for a
   description — the buttons show short labels with icons.
