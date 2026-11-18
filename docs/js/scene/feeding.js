@@ -32,16 +32,11 @@ export const feedingMixin = {
   },
 
   // FEAST PLANT: $40 for 30 nibbles, dropped from the cursor like any
-  // food. Max 3 at once — the cap is what stops hold-to-feed burning
-  // $40 a drop forever, and a failed drop cancels the hold (see
-  // updateFeedHold), so the player has to press again once a plant
-  // is finished. No Tank Upgrade gate: the $40 cost IS the gate.
+  // food. NO cap on how many can be out at once — hold-to-feed drops
+  // one every 0.1s at $40 each, so the only limit is the money. A
+  // failed drop (broke) cancels the hold (see updateFeedHold). No
+  // Tank Upgrade gate: the $40 cost IS the gate.
   dropPlant(x, y) {
-    if (this.feastPlants.length >= CONFIG.plantMax) {
-      this.toast("Only " + CONFIG.plantMax + " feast plants at once — wait for the fish to finish one!");
-      sfx.denied();
-      return false;
-    }
     if (this.money < CONFIG.plantCost) {
       this.toast("Not enough money for food! Collect some coins first.");
       sfx.denied();
@@ -56,30 +51,46 @@ export const feedingMixin = {
   },
 
   // A feast plant is one container: a stem, six frond blades fanning
-  // up from the base, and a counter above it. The container's
-  // position is the plant's centre (for steering and nibble range);
-  // the base sits 14px below it, so the plant anchors with its base
-  // on the floor (floorY - 14). Fronds are hidden one per 5 nibbles
-  // (see updatePlantFronds) — the depletion is visible at a glance.
+  // up from the base, a bare skeleton for the final stage, and a
+  // counter above it. Everything is scaled by CONFIG.plantScale (3):
+  // the anchored plant stands ~152px tall — dwarfing a ~50px guppy
+  // without dominating the 540px tank. The container's position is
+  // the plant's centre (for steering); the base sits 48px below it,
+  // so the plant anchors with its base on the floor (floorY - 42).
+  // Fronds are hidden one per 5 nibbles and the last few leave only
+  // the skeleton (see updatePlantFronds).
   spawnFeastPlant(x, y) {
+    const S = CONFIG.plantScale;
+    // Tallest frond: a 36px blade × 3 × 1.15 Y-scale at 10° reaches
+    // ~122px above its pivot (+18) — the plant's top is ~104px above
+    // its centre, its base 48px below: ~152px tall in all.
+    const topOffset = Math.round(6 * S - 36 * S * 1.15 * Math.cos(10 * Math.PI / 180));
+    const baseOffset = 16 * S;
     const px = Phaser.Math.Clamp(x, 20, CONFIG.width - 20);
-    const py = Phaser.Math.Clamp(y, 44, CONFIG.waterBottom - 30);
+    // Keep the whole plant on screen when dropped: the top must not
+    // start above the water.
+    const py = Phaser.Math.Clamp(y, 44 - topOffset, CONFIG.waterBottom - 30);
     const container = this.add.container(px, py).setDepth(3);
-    const stem = this.add.rectangle(0, 4, 5, 24, 0x2f7a3d);
+    const stem = this.add.rectangle(0, 4 * S, 5 * S, 24 * S, 0x2f7a3d);
     container.add(stem);
     const fronds = [];
     const angles = [-50, -30, -10, 10, 30, 50];
     angles.forEach((deg, i) => {
-      const f = this.add.image(0, 6, "feast-plant-frond").setOrigin(0.5, 1);
+      const f = this.add.image(0, 6 * S, "feast-plant-frond").setOrigin(0.5, 1);
       f.rotation = deg * Math.PI / 180; // pivot at the base, fan outward
-      f.setScale(1, 0.85 + (i % 3) * 0.15);
+      f.setScale(S, S * (0.85 + (i % 3) * 0.15));
       container.add(f);
       fronds.push(f);
     });
-    const counter = this.add.text(0, -48, String(CONFIG.plantNibbles), { fontSize: "12px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#0b2a3acc", padding: { x: 4, y: 2 } }).setOrigin(0.5, 0.5);
+    // Bare skeleton for the final stage — hidden until the fronds
+    // are all gone. Same -104..+48 extent as the full plant.
+    const skeleton = this.add.image(0, baseOffset, "feast-plant-skeleton").setOrigin(0.5, 1).setVisible(false);
+    container.add(skeleton);
+    const counter = this.add.text(0, -48 * S, String(CONFIG.plantNibbles), { fontSize: "12px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#0b2a3acc", padding: { x: 4, y: 2 } }).setOrigin(0.5, 0.5);
     container.add(counter);
     const plant = {
-      container, counter, fronds,
+      container, counter, fronds, stem, skeleton,
+      topOffset, baseOffset, heightPx: baseOffset - topOffset,
       nibbles: CONFIG.plantNibbles,
       sinking: true,      // still dropping toward the floor
       biteTimer: 0,       // plant-wide: one bite at most every 0.4s
@@ -91,27 +102,49 @@ export const feedingMixin = {
   },
 
   // Fronds + counter, from the nibble count: one frond lost per 5
-  // nibbles (6 at 30, 5 at 25, ... 1 at 1-5). Called on every nibble
-  // and directly by tests.
+  // nibbles (6 at 30, 5 at 25, ... 2 at 6-10). The final 5 nibbles
+  // strip the plant to a bare skeleton — no fronds, no green stem,
+  // just the pale stem with stubs. Called on every nibble and
+  // directly by tests.
   updatePlantFronds(plant) {
-    const visible = Math.ceil(plant.nibbles / CONFIG.plantFrondEvery);
-    plant.fronds.forEach((f, i) => f.setVisible(i < visible));
+    if (plant.nibbles > CONFIG.plantFrondEvery) {
+      const visible = Math.ceil(plant.nibbles / CONFIG.plantFrondEvery);
+      plant.fronds.forEach((f, i) => f.setVisible(i < visible));
+      plant.stem.setVisible(true);
+      plant.skeleton.setVisible(false);
+    } else {
+      plant.fronds.forEach((f) => f.setVisible(false));
+      plant.stem.setVisible(false);
+      plant.skeleton.setVisible(true);
+    }
     plant.counter.setText(String(plant.nibbles));
+  },
+
+  // Squared distance from a point to a plant's body — the vertical
+  // segment from its top fronds to its base on the floor. A ~150px
+  // plant is edible along its whole height, not just within 50px of
+  // its centre; the 50px range itself is unchanged.
+  plantDistSq(plant, x, y) {
+    const dx = x - plant.container.x;
+    const topY = plant.container.y + plant.topOffset;
+    const baseY = plant.container.y + plant.baseOffset;
+    const dy = y < topY ? topY - y : (y > baseY ? y - baseY : 0);
+    return dx * dx + dy * dy;
   },
 
   // Plants sink slowly (25 px/s, swaying ±8px), anchor on the floor,
   // and get nibbled. A plant is NEVER destroyed at the floor — unlike
   // pellets, it stays until fully eaten. The nearest eligible fish
-  // within 50px takes one bite: not grabbed, not on its 0.5s pellet
-  // cooldown, not on its 1.5s plant chew pause, and the plant itself
-  // must be past its 0.4s bite timer.
+  // within 50px of the plant's BODY takes one bite: not grabbed, not
+  // on its 0.5s pellet cooldown, not on its 1.5s plant chew pause,
+  // and the plant itself must be past its 0.4s bite timer.
   updateFeastPlants(dt, time) {
     for (const plant of [...this.feastPlants]) {
       if (plant.sinking) {
         plant.container.y += CONFIG.plantSinkPxS * dt;
         plant.container.x = plant.baseX + Math.sin(time / 700 + plant.swayPhase) * CONFIG.plantSwayPx;
-        if (plant.container.y >= CONFIG.floorY - 14) {
-          plant.container.y = CONFIG.floorY - 14;
+        if (plant.container.y >= CONFIG.floorY - 14 * CONFIG.plantScale) {
+          plant.container.y = CONFIG.floorY - 14 * CONFIG.plantScale;
           plant.container.x = plant.baseX;
           plant.sinking = false;
         }
@@ -121,8 +154,7 @@ export const feedingMixin = {
         let best = null, bestD = CONFIG.plantNibbleRangePx * CONFIG.plantNibbleRangePx;
         for (const f of this.fish) {
           if (f.grabbed || (f.eatCooldownSec || 0) > 0 || (f.plantChewSec || 0) > 0) continue;
-          const dx = f.sprite.x - plant.container.x, dy = f.sprite.y - plant.container.y;
-          const d = dx * dx + dy * dy;
+          const d = this.plantDistSq(plant, f.sprite.x, f.sprite.y);
           if (d < bestD) { bestD = d; best = f; }
         }
         if (best) this.nibblePlant(best, plant);

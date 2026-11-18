@@ -29,9 +29,10 @@ deploys this repo's `docs/` folder.)
   prices stay whole dollars.
 - **Feeding:** one "Food" button opens a panel with three food types —
   Standard $2 = 1 feed, Deluxe $5 = 2 feeds, Feast Plant $40 = 30 nibbles
-  shared by the whole tank. The plant drops from the cursor, sinks slowly,
-  anchors on the floor until fully eaten, and loses a frond every 5 nibbles
-  (max 3 at once). Fish chase the nearest food and first arrival wins — they
+  shared by the whole tank. The plant is big (~150px tall, dwarfing a
+  fish), drops from the cursor, sinks slowly, anchors on the floor until
+  fully eaten, and loses a frond every 5 nibbles — the last few leave a
+  bare skeleton. No cap on how many plants at once. Fish chase the
   fight over food. A 0.5s eat cooldown is the only anti-hogging for pellets
   (plants add a 1.5s chew pause per fish and one bite per 0.4s per plant).
   Overlapping fish drift apart, and a fish that just ate drifts away so the

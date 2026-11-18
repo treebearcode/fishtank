@@ -388,10 +388,12 @@ export const fishMixin = {
         }
         // Feast plants are food too — nearest food wins, pellet or
         // plant. A plant is chased while sinking AND once anchored.
+        // Distance is measured to the plant's BODY (see plantDistSq):
+        // a fish next to a 150px plant's top fronds is next to food,
+        // not 100px from its centre.
         let nearestPlant = null, nearestPlantD = Infinity;
         for (const pl of this.feastPlants) {
-          const pdx = pl.container.x - fish.sprite.x, pdy = pl.container.y - fish.sprite.y;
-          const pd = pdx * pdx + pdy * pdy;
+          const pd = this.plantDistSq(pl, fish.sprite.x, fish.sprite.y);
           if (pd < nearestPlantD) { nearestPlantD = pd; nearestPlant = pl; }
         }
         if (nearestPellet && nearestD <= nearestPlantD) {

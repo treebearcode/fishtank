@@ -375,6 +375,31 @@ export function makeFeastPlantFrondTexture(scene) {
   return key;
 }
 
+// Feast Plant skeleton — what is left when the fish strip a plant
+// to the bone: a bare pale stem with a few stub branches, no leaves.
+// Drawn at the plant's full rendered height (152px: it spans the
+// same -104..+48 local extent as the fronds and stem), shown only
+// for the final 5 nibbles (see updatePlantFronds).
+export function makeFeastPlantSkeletonTexture(scene) {
+  const key = "feast-plant-skeleton";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Bare stem: pale bone, slightly tapered — wide at the base.
+  g.fillStyle(0xd8cba6, 1);
+  g.fillTriangle(6, 152, 14, 152, 10, 0);
+  // Stub branches where the fronds were bitten off — short nubs
+  // alternating sides.
+  g.fillStyle(0xbfae85, 1);
+  g.fillRect(3, 28, 8, 3);
+  g.fillRect(11, 52, 8, 3);
+  g.fillRect(2, 78, 8, 3);
+  g.fillRect(11, 102, 8, 3);
+  g.fillRect(3, 126, 8, 3);
+  g.generateTexture(key, 20, 152);
+  g.destroy();
+  return key;
+}
+
 // Claws the crab — round orange body, two raised claws, stalk eyes.
 // Faces right, like the fish; setFlipX(true) turns him around.
 export function makeCrabTexture(scene) {

@@ -37,16 +37,18 @@ export const CONFIG = {
   // between its own bites, and the plant allows at most one bite
   // every 0.4s — a full tank finishes one in ~12s, a lone fish
   // grazes for ~45s. It loses one frond per 5 nibbles, so the
-  // depletion is visible. Max 3 at once: the cap is also what stops
-  // hold-to-feed burning $40 a drop forever.
+  // depletion is visible. The last few nibbles strip it to a bare
+  // skeleton. There is NO cap on how many plants can be out at once
+  // — hold-to-feed drops one every 0.1s at $40 each, so holding the
+  // button down burns $400/s until the money runs out.
   plantCost: 40,          // $ per Feast Plant
   plantNibbles: 30,       // nibbles in one plant
   plantSinkPxS: 25,       // sink speed — slower than a pellet (40)
   plantSwayPx: 8,         // sideways sway while sinking
+  plantScale: 3,          // rendered size vs the original plant: ~150px tall, dwarfing a ~50px guppy
   plantChewSec: 1.5,      // a fish waits this long between its own bites
   plantGlobalSec: 0.4,    // a plant allows at most one bite this often
-  plantMax: 3,            // max plants at once (sinking + anchored)
-  plantNibbleRangePx: 50, // how close a fish must be to take a bite
+  plantNibbleRangePx: 50, // how close a fish must be to take a bite — measured to the plant's body, not its centre
   plantFrondEvery: 5,     // one frond lost per this many nibbles
   feedHoldIntervalSec: 0.1, // hold-to-feed: a pellet every 0.1s (~10/s, spam-click pace)
   coralCost: 75,

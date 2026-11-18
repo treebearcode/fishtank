@@ -2541,7 +2541,8 @@ test("speeds: the hunt is still 3x the hunter's effective speed", () => {
 test("food panel: plant tuning constants are the agreed numbers", () => {
   const C = G.CONFIG;
   eq(C.plantCost, 40); eq(C.plantNibbles, 30); eq(C.plantSinkPxS, 25);
-  eq(C.plantChewSec, 1.5); eq(C.plantGlobalSec, 0.4); eq(C.plantMax, 3);
+  eq(C.plantChewSec, 1.5); eq(C.plantGlobalSec, 0.4); eq(C.plantScale, 3);
+  eq(C.plantMax, undefined, "no plant cap any more");
   eq(C.plantNibbleRangePx, 50); eq(C.plantFrondEvery, 5);
   eq(C.feedHoldIntervalSec, 0.1, "hold cadence unchanged for plants — same as pellets");
 });
@@ -2663,7 +2664,7 @@ test("plant: sinks ~25 px/s with sway, then anchors on the floor and never disap
   assert(Math.abs(p.container.x - 480) <= 8, "sway within ±8px, x=" + p.container.x);
   const q = s.spawnFeastPlant(480, 400);
   step(s, 2, () => { for (const f of s.fish) f.eatCooldownSec = 999; });
-  eq(q.container.y, G.CONFIG.floorY - 14, "anchored at floorY - 14");
+  eq(q.container.y, G.CONFIG.floorY - 14 * G.CONFIG.plantScale, "anchored at floorY - 42");
   eq(q.sinking, false, "no longer sinking");
   eq(q.container.x, q.baseX, "sway stops once anchored");
   step(s, 5, () => { for (const f of s.fish) f.eatCooldownSec = 999; });
@@ -2685,17 +2686,25 @@ test("plant: a nibble is 1 feed — hunger resets and growth progresses", () => 
   eq(p.nibbles, 29, "one nibble taken");
   assert(f.plantChewSec > 0, "chew pause started");
 });
-test("plant: fronds are lost every 5 nibbles, and the plant vanishes at 0", () => {
+test("plant: fronds are lost every 5 nibbles, the last few leave a bare skeleton, and the plant vanishes at 0", () => {
   const s = makeScene();
   const p = s.spawnFeastPlant(480, 200);
   const visible = () => p.fronds.filter((f) => f.visible).length;
   eq(visible(), 6, "6 fronds at 30 nibbles");
+  assert(p.skeleton.visible === false, "skeleton hidden while bushy");
+  assert(p.stem.visible === true, "green stem shown while bushy");
   p.nibbles = 26; s.updatePlantFronds(p); eq(visible(), 6, "26 nibbles: still 6");
   p.nibbles = 25; s.updatePlantFronds(p); eq(visible(), 5, "25 nibbles: 5");
   p.nibbles = 21; s.updatePlantFronds(p); eq(visible(), 5, "21 nibbles: still 5");
   p.nibbles = 20; s.updatePlantFronds(p); eq(visible(), 4, "20 nibbles: 4");
   p.nibbles = 6; s.updatePlantFronds(p); eq(visible(), 2, "6 nibbles: 2");
-  p.nibbles = 1; s.updatePlantFronds(p); eq(visible(), 1, "1 nibble: 1");
+  p.nibbles = 5; s.updatePlantFronds(p);
+  eq(visible(), 0, "5 nibbles: no fronds left");
+  assert(p.skeleton.visible === true, "5 nibbles: stripped to a skeleton");
+  assert(p.stem.visible === false, "5 nibbles: green stem hidden");
+  p.nibbles = 1; s.updatePlantFronds(p);
+  eq(visible(), 0, "1 nibble: still a skeleton");
+  assert(p.skeleton.visible === true, "1 nibble: skeleton still shown");
   eq(p.counter.text, "1", "counter shows the nibbles left");
   // Vanish: one nibble left, a fish takes it, the plant is gone.
   clearLiveFish(s);
@@ -2706,29 +2715,64 @@ test("plant: fronds are lost every 5 nibbles, and the plant vanishes at 0", () =
   assert(!s.feastPlants.includes(p), "plant removed at 0 nibbles");
   assert(p.container.destroyed, "container destroyed");
 });
-test("plant: max 3 — a fourth drop is blocked with a toast", () => {
+test("plant: rendered ~152px tall — more than 2x a guppy, less than half the tank", () => {
+  const s = makeScene();
+  const p = s.spawnFeastPlant(480, 200);
+  // A guppy is ~50px long (40px body + tail); the plant dwarfs it.
+  assert(p.heightPx > 2 * 50, "plant height " + p.heightPx + "px is >2x a guppy");
+  assert(p.heightPx < G.CONFIG.height / 2, "plant height " + p.heightPx + "px is < half the 540px tank");
+  eq(p.topOffset, -104, "top offset");
+  eq(p.baseOffset, 48, "base offset");
+  eq(p.heightPx, 152, "152px tall in all");
+  eq(p.fronds[0].scaleX, 3, "fronds scaled 3x");
+  assert(p.fronds[0].scaleY >= 2.5, "frond Y-scale ~3x, got " + p.fronds[0].scaleY);
+  eq(p.skeleton.texture, "feast-plant-skeleton", "skeleton visual attached");
+  eq(p.counter.y, -144, "counter floats above the taller plant");
+});
+test("plant: nibble range is measured to the plant's body — a fish at its top fronds can bite", () => {
+  // Plant anchored: centre 386, top 282, base 434. A fish at (480, 300)
+  // sits against the plant's upper fronds — 86px from the centre, but
+  // 0px from the body — so it can nibble.
+  const s = makeScene();
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 300, "guppy");
+  f.targetX = 480; f.targetY = 300; f.wanderTimer = 100;
+  const p = s.spawnFeastPlant(480, 386);
+  p.sinking = false;
+  step(s, 0.5);
+  assert(p.nibbles < 30, "fish at the top fronds nibbled, nibbles=" + p.nibbles);
+  // And a fish 120px to the side of the plant's middle cannot reach it,
+  // even sprinting: it closes at most ~60px in 0.5s, still >50px away.
+  const s2 = makeScene();
+  clearLiveFish(s2);
+  const f2 = s2.spawnFish(600, 386, "guppy");
+  f2.targetX = 600; f2.targetY = 386; f2.wanderTimer = 100;
+  const p2 = s2.spawnFeastPlant(480, 386);
+  p2.sinking = false;
+  step(s2, 0.5);
+  eq(p2.nibbles, 30, "fish 120px to the side took no bite");
+});
+test("plant: no cap — a fourth, fifth and sixth plant all drop fine", () => {
   const s = makeScene();
   s.selectFood("plant");
   s.money = 5000;
-  for (let i = 0; i < 3; i++) assert(s.dropFood(200 + i * 200, 150), "drop " + (i + 1) + " succeeds");
-  eq(s.feastPlants.length, 3, "three plants");
-  eq(s.money, 5000 - 120, "$120 charged");
-  eq(s.dropFood(480, 150), false, "fourth drop blocked");
-  eq(s.feastPlants.length, 3, "still three");
-  eq(s.money, 5000 - 120, "no further charge");
-  assert(s.toastText.text.indexOf("3") >= 0, "cap toast: " + s.toastText.text);
+  for (let i = 0; i < 5; i++) assert(s.dropFood(200 + i * 100, 150), "drop " + (i + 1) + " succeeds");
+  eq(s.feastPlants.length, 5, "five plants");
+  eq(s.money, 5000 - 200, "$200 charged");
+  assert(s.dropFood(700, 150), "a sixth plant drops too");
+  eq(s.feastPlants.length, 6, "six plants");
 });
-test("plant: hold-down spawns plants at the pellet repeat rate, then the cap stops it", () => {
+test("plant: hold-down spawns plants at the pellet repeat rate with no cap to stop it", () => {
   const s = makeScene();
   s.selectFood("plant");
   s.money = 5000;
   s.onPointerDown({ x: 850, y: 150 });
   eq(s.feastPlants.length, 1, "the press drops one plant");
   eq(s.feedHold, true, "hold armed");
-  step(s, 0.3, () => keepFed(s));
-  eq(s.feastPlants.length, 3, "press + 2 cadence drops in 0.3s, got " + s.feastPlants.length);
-  eq(s.feedHold, false, "hold cancelled once the cap blocks");
-  eq(s.money, 5000 - 120, "$120 charged for 3 plants");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.feastPlants.length, 6, "press + 5 cadence drops in 0.5s, got " + s.feastPlants.length);
+  eq(s.feedHold, true, "hold keeps going — no cap stops it");
+  eq(s.money, 5000 - 240, "$240 charged for 6 plants");
 });
 test("plant: sprint applies to a sinking plant and to an anchored plant in the 40-120px window", () => {
   // Sinking plant 80px away.
@@ -2738,10 +2782,10 @@ test("plant: sprint applies to a sinking plant and to an anchored plant in the 4
   assert(t.fish.sprintSec > 0, "sprint to a sinking plant, sprintSec=" + t.fish.sprintSec);
   // Anchored plant 80px away (a plant is food all the way down).
   t = sprintScene();
-  const anchored = t.scene.spawnFeastPlant(t.fish.sprite.x + 80, G.CONFIG.floorY - 14);
+  const anchored = t.scene.spawnFeastPlant(t.fish.sprite.x + 80, G.CONFIG.floorY - 14 * G.CONFIG.plantScale);
   anchored.sinking = false;
-  t.fish.sprite.y = G.CONFIG.floorY - 14;
-  t.fish.targetY = G.CONFIG.floorY - 14;
+  t.fish.sprite.y = G.CONFIG.floorY - 14 * G.CONFIG.plantScale;
+  t.fish.targetY = G.CONFIG.floorY - 14 * G.CONFIG.plantScale;
   step(t.scene, 0.1);
   assert(t.fish.sprintSec > 0, "sprint to an anchored plant, sprintSec=" + t.fish.sprintSec);
   // Too far: no sprint.

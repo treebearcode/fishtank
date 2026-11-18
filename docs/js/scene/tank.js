@@ -17,7 +17,7 @@ import { goalIsMet, countLargeFish } from "../economy.js";
 import { sfx } from "../sound.js";
 import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
-  makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeCrabTexture, makeFeederBotTexture,
+  makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeFeastPlantSkeletonTexture, makeCrabTexture, makeFeederBotTexture,
   makeBotLightTexture, makeEggTexture, makeTreasureChestTexture,
   makeJellyfishTexture, makeJellyBurstTexture,
 } from "../textures.js";
@@ -173,6 +173,7 @@ export class TankScene extends Phaser.Scene {
     makePelletTexture(this);
     makeDeluxePelletTexture(this);
     makeFeastPlantFrondTexture(this); // one leaf blade, reused per frond
+    makeFeastPlantSkeletonTexture(this); // the bare stem a plant is stripped to
     makeFeederBotTexture(this);
     makeBotLightTexture(this);
     makeEggTexture(this);
