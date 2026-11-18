@@ -57,14 +57,6 @@ export const uiMixin = {
     if (label) btn.text.setText(label);
   },
 
-  // Food-selector highlight. Selected food = gold, unselected = dark
-  // blue. Selection is free — affordability is checked when a pellet
-  // is actually dropped, not when you pick a food type.
-  setButtonSelected(btn, selected) {
-    btn.bg.setFillStyle(selected ? 0xffd23f : 0x2a5a75, 1);
-    btn.text.setColor(selected ? "#12394d" : "#cfeeff");
-  },
-
   updateShopUI() {
     const cap = this.maxFishCap();
     const atCap = this.fish.length >= cap;
@@ -96,8 +88,12 @@ export const uiMixin = {
     // only clickable when you can afford it.
     this.setButtonEnabled(this.feederBtn, this.feederOwned || this.money >= CONFIG.feederCost,
       !this.feederOwned ? "Feeder" : this.feederOn ? "Feeder: ON" : "Feeder: OFF");
-    this.setButtonSelected(this.foodStdBtn, this.foodType === "standard");
-    this.setButtonSelected(this.foodDeluxeBtn, this.foodType === "deluxe");
+    // Food: one button showing the current selection; the panel picks
+    // it (see toggleFoodPanel). Always clickable — selecting is free.
+    this.setButtonEnabled(this.foodBtn, true, this.foodLabel());
+    this.foodBtn.icon.setText(this.foodIcon());
+    // Uncap Fish: free playtest toggle, always clickable.
+    this.setButtonEnabled(this.uncapBtn, true, this.uncapFish ? "Uncap: ON" : "Uncap: OFF");
     // Decor: one shared button. It stays clickable (it opens the panel,
     // which is free to look at) as long as anything is left to buy; it
     // shows "Decor ✓" once all three are owned.
@@ -135,14 +131,22 @@ export const uiMixin = {
     }
   },
 
-  // Fish cap is 16, or 28 after the tank upgrade.
-  maxFishCap() { return this.tankUpgraded ? CONFIG.maxFishUpgraded : CONFIG.maxFish; },
+  // Fish cap is 16, or 28 after the tank upgrade — unless the Uncap
+  // Fish playtest toggle is ON, in which case there is no cap at all.
+  // Returning Infinity here is the whole trick: every cap check in
+  // the game (buying, breeding, egg hatching, chest rewards) compares
+  // against this, so they all pass naturally while uncapped.
+  maxFishCap() {
+    if (this.uncapFish) return Infinity;
+    return this.tankUpgraded ? CONFIG.maxFishUpgraded : CONFIG.maxFish;
+  },
 
   updateTopUI() {
     // Money is a float with cents — "$12" when whole, "$12.35" when
     // there are cents (moneyFmt).
     this.moneyText.setText(moneyFmt(this.money));
-    this.fishText.setText("Fish: " + this.fish.length + " / " + this.maxFishCap());
+    const cap = this.maxFishCap();
+    this.fishText.setText("Fish: " + this.fish.length + " / " + (cap === Infinity ? "∞" : cap));
     this.emptyText.setVisible(this.fish.length === 0 && this.started);
   },
 
@@ -185,6 +189,7 @@ export const uiMixin = {
     for (const fish of this.fish) { fish.sprite.destroy(); if (fish.tail) fish.tail.destroy(); }
     for (const dead of this.deadFish) dead.sprite.destroy();
     for (const pellet of this.pellets) pellet.sprite.destroy();
+    for (const plant of this.feastPlants) plant.container.destroy();
     for (const coin of this.coins) coin.container.destroy();
     if (this.snail) this.snail.sprite.destroy();
     if (this.crab) this.crab.sprite.destroy();
@@ -194,6 +199,7 @@ export const uiMixin = {
     this.fish = [];
     this.deadFish = [];
     this.pellets = [];
+    this.feastPlants = [];
     this.coins = [];
     this.snail = null;
     this.crab = null;
@@ -207,6 +213,7 @@ export const uiMixin = {
     this.decorations = { coral: false, chest: false, castle: false };
     Object.values(this.decorSprites).forEach((g) => g.setVisible(false));
     this.tankUpgraded = false;
+    this.uncapFish = false; // the playtest toggle resets with the tank
     this.speedMult = 1;
     this.goalComplete = false;
     this.goalPopupShown = false;
@@ -218,6 +225,7 @@ export const uiMixin = {
     this.magnetLevel = 0;
     this.magnetOwned = false;
     this.closeDecorPanel();
+    this.closeFoodPanel();
     this.pointerSeen = false;
     this.dragFish = null;
     this.dragActive = false;

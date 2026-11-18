@@ -27,6 +27,27 @@ export const CONFIG = {
   crabSpeed: 60,      // px/s, in 2D — Claws chases sinking coins
   deluxeFoodCost: 5,  // $ per deluxe pellet (counts as 2 feeds)
   deluxeFeeds: 2,
+  // FEAST PLANT: a big food that many fish share — $40 for 30
+  // nibbles, dropped from the cursor like any food. It sinks slowly
+  // (25 px/s, visibly lazier than a 40 px/s pellet), fish may nibble
+  // it on the way down, and on reaching the floor it ANCHORS and
+  // stays until fully eaten — it never disappears at the floor the
+  // way pellets do. Each nibble is 1 full feed. The pacing is what
+  // keeps a frenzy from stripping it instantly: a fish waits 1.5s
+  // between its own bites, and the plant allows at most one bite
+  // every 0.4s — a full tank finishes one in ~12s, a lone fish
+  // grazes for ~45s. It loses one frond per 5 nibbles, so the
+  // depletion is visible. Max 3 at once: the cap is also what stops
+  // hold-to-feed burning $40 a drop forever.
+  plantCost: 40,          // $ per Feast Plant
+  plantNibbles: 30,       // nibbles in one plant
+  plantSinkPxS: 25,       // sink speed — slower than a pellet (40)
+  plantSwayPx: 8,         // sideways sway while sinking
+  plantChewSec: 1.5,      // a fish waits this long between its own bites
+  plantGlobalSec: 0.4,    // a plant allows at most one bite this often
+  plantMax: 3,            // max plants at once (sinking + anchored)
+  plantNibbleRangePx: 50, // how close a fish must be to take a bite
+  plantFrondEvery: 5,     // one frond lost per this many nibbles
   feedHoldIntervalSec: 0.1, // hold-to-feed: a pellet every 0.1s (~10/s, spam-click pace)
   coralCost: 75,
   chestCost: 100,
@@ -147,7 +168,7 @@ export function speciesDef(key) { return SPECIES[key] || SPECIES.guppy; }
 // buttons are 100x30, so labels stay readable.
 //   Row 1 (y 478): the 4 species + Turbo + Claws + Feeder-bot (cols 0-6)
 //     + Magnet, WIDE (spans cols 7-8, 206px).
-//   Row 2 (y 514): Std / Dlx food + Decor + Tank + 2x Speed + Sell (cols 0-5).
+//   Row 2 (y 514): Food + Uncap + Decor + Tank + 2x Speed + Sell (cols 0-5).
 // Sell is a DROP ZONE, not a purchase — the drag-to-sell check uses
 // SELL_BOUNDS, which is derived from this layout (row 2, col 5).
 export const SHOP = { cols: 9, slotW: 960 / 9, btnW: 100, btnH: 30, row1Y: 478, row2Y: 514 };
@@ -167,6 +188,12 @@ export const DESC_DEFAULT_TEXT = "Hover a button for details — click water to 
 // centred on the Decor button's column, bottom edge just above the
 // description bar. Header + 3 rows of 22px.
 export const DECOR_PANEL = { w: 320, h: 104, cx: 267, cy: 394 };
+
+// FOOD PANEL GEOMETRY: mirrors the Decor panel (same height, same
+// bottom edge, header + 3 rows) but narrower — it hangs off the Food
+// button in column 0, so a 320-wide panel would run off the left
+// edge. Width 300, left edge flush with the tank's left edge.
+export const FOOD_PANEL = { w: 300, h: 104, cx: 150, cy: 394 };
 
 // FEEDER-BOT SWIM BAND: the robot swims the upper/mid water only and must
 // NEVER go deeper than y = 300, so the pellets it drops have fall time and

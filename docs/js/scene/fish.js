@@ -42,6 +42,10 @@ export const fishMixin = {
       // eatCooldownSec ticks down in updateFish() — a fish that just
       // ate cannot eat again until this hits 0 (the ONLY anti-hogging).
       eatCooldownSec: 0,
+      // plantChewSec is the feast-plant version of that cooldown: a
+      // fish that just took a bite waits 1.5s before its next plant
+      // bite (see nibblePlant). It ticks down alongside eatCooldownSec.
+      plantChewSec: 0,
       // BREEDING: lastFedSec is seconds since this fish last ate
       // (tracked alongside hungerSec, reset in feedFish). A pair can
       // breed only while both lastFedSec values are <= 30s.
@@ -224,6 +228,8 @@ export const fishMixin = {
       // The eat cooldown ticks down every frame (2x speed ticks it
       // down twice as fast, like every other timer).
       if (fish.eatCooldownSec > 0) fish.eatCooldownSec = Math.max(0, fish.eatCooldownSec - dt);
+      // The plant chew pause ticks down the same way.
+      if (fish.plantChewSec > 0) fish.plantChewSec = Math.max(0, fish.plantChewSec - dt);
       // The post-meal drift timer ticks down here too, so it expires
       // on schedule even if the fish is grabbed or poked mid-drift
       // (those branches `continue` before steering).
@@ -344,15 +350,21 @@ export const fishMixin = {
         }
       }
 
-      // Steering: chase the NEAREST pellet, else wander. Every fish
-      // may chase the same pellet, so they fight over it — the 0.5s
-      // cooldown (not a claim) is what stops one fish eating every
-      // pellet in a row. A fish on its post-meal drift does NEITHER —
-      // it swims to its drift point (set in feedFish) and ignores
-      // pellets for steering until the drift timer runs out.
+      // Steering: chase the NEAREST food — a pellet or a feast plant,
+      // nearest wins — else wander. Every fish may chase the same
+      // food, so they fight over it — the 0.5s cooldown (not a claim)
+      // is what stops one fish eating every pellet in a row, and the
+      // plant's own chew/global pacing does the same for plants. A
+      // fish on its post-meal drift does NEITHER — it swims to its
+      // drift point (set in feedFish / nibblePlant) and ignores food
+      // for steering until the drift timer runs out.
       let tx = fish.targetX, ty = fish.targetY;
       let chasing = false;
       let nearestPellet = null, nearestD = Infinity;
+      // The food target the sprint checks: { x, y, sinking } — a
+      // pellet counts only while sinking, a plant always (it is food
+      // on the way down AND on the floor).
+      let chaseTarget = null;
       // A fish in a hearts pair swims toward its partner, not toward
       // food or a wander target, for the ~3s the hearts last. It still
       // eats if a pellet bumps into it — only the steering changes.
@@ -374,8 +386,20 @@ export const fishMixin = {
           const pd = pdx * pdx + pdy * pdy;
           if (pd < nearestD) { nearestD = pd; nearestPellet = p; }
         }
-        if (nearestPellet) {
+        // Feast plants are food too — nearest food wins, pellet or
+        // plant. A plant is chased while sinking AND once anchored.
+        let nearestPlant = null, nearestPlantD = Infinity;
+        for (const pl of this.feastPlants) {
+          const pdx = pl.container.x - fish.sprite.x, pdy = pl.container.y - fish.sprite.y;
+          const pd = pdx * pdx + pdy * pdy;
+          if (pd < nearestPlantD) { nearestPlantD = pd; nearestPlant = pl; }
+        }
+        if (nearestPellet && nearestD <= nearestPlantD) {
           tx = nearestPellet.sprite.x; ty = nearestPellet.sprite.y; chasing = true;
+          chaseTarget = { x: tx, y: ty, sinking: !nearestPellet.landed };
+        } else if (nearestPlant) {
+          tx = nearestPlant.container.x; ty = nearestPlant.container.y; chasing = true;
+          chaseTarget = { x: tx, y: ty, sinking: true };
         }
       }
       if (!chasing && fish.driftSec <= 0 && !breeding) {
@@ -393,17 +417,19 @@ export const fishMixin = {
           tx = fish.targetX; ty = fish.targetY;
         }
       }
-      // DESPERATE SPRINT: chasing a SINKING pellet 40-120px away —
-      // close enough to want, far enough to miss — the fish bursts
-      // to 1.8x for up to 1.5s, then needs a ~3s breather. The burst
-      // ends early if the pellet is eaten, lands, or leaves the
-      // window; a pellet closer than 40px needs no sprint, and one
-      // farther than 120px is just a normal chase. Hunting, drifting,
-      // and breeding never sprint — only the food chase does.
+      // DESPERATE SPRINT: chasing a SINKING food target 40-120px
+      // away — close enough to want, far enough to miss — the fish
+      // bursts to 1.8x for up to 1.5s, then needs a ~3s breather. The
+      // burst ends early if the food is eaten, lands, or leaves the
+      // window; a target closer than 40px needs no sprint, and one
+      // farther than 120px is just a normal chase. The target is a
+      // pellet (only while sinking) or a feast plant (sinking or
+      // anchored — a plant is food all the way down). Hunting,
+      // drifting, and breeding never sprint — only the food chase does.
       let sprinting = false;
-      if (chasing && nearestPellet && !nearestPellet.landed) {
-        const pelletDist = Math.sqrt(nearestD);
-        const inWindow = pelletDist >= CONFIG.sprintMinPx && pelletDist <= CONFIG.sprintMaxPx;
+      if (chasing && chaseTarget && chaseTarget.sinking) {
+        const chaseDist = Math.hypot(chaseTarget.x - fish.sprite.x, chaseTarget.y - fish.sprite.y);
+        const inWindow = chaseDist >= CONFIG.sprintMinPx && chaseDist <= CONFIG.sprintMaxPx;
         if (fish.sprintSec > 0) {
           if (!inWindow) this.endSprint(fish);
         } else if (inWindow && fish.sprintCooldownSec <= 0) {

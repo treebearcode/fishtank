@@ -718,7 +718,7 @@ test("scene: feeder button becomes ON/OFF toggle; tank/decor/magnet show state",
 test("scene: every shop button has an icon and a tooltip function", () => {
   const s = makeScene();
   const btns = [s.guppyBtn, s.emberfinBtn, s.chomperBtn, s.starfishBtn, s.snailBtn,
-    s.crabBtn, s.feederBtn, s.magnetBtn, s.foodStdBtn, s.foodDeluxeBtn, s.decorBtn,
+    s.crabBtn, s.feederBtn, s.magnetBtn, s.foodBtn, s.uncapBtn, s.decorBtn,
     s.tankBtn, s.speedBtn, s.sellBtn];
   eq(btns.length, 14, "14 shop buttons: 8 row 1 (magnet wide) + 6 row 2");
   for (const b of btns) {
@@ -2533,6 +2533,313 @@ test("speeds: the hunt is still 3x the hunter's effective speed", () => {
   const d = hunter.sprite.x - x0;
   approx(d, 30 * 1.25 * 3 * 0.2, 3, "hunting chomper ~22.5px in 0.2s, got " + d);
   assert(s.fish.includes(baby), "baby still alive after 0.2s");
+});
+
+// ===========================================================================
+// 16. FOOD PANEL + FEAST PLANT + UNCAP FISH
+// ===========================================================================
+test("food panel: plant tuning constants are the agreed numbers", () => {
+  const C = G.CONFIG;
+  eq(C.plantCost, 40); eq(C.plantNibbles, 30); eq(C.plantSinkPxS, 25);
+  eq(C.plantChewSec, 1.5); eq(C.plantGlobalSec, 0.4); eq(C.plantMax, 3);
+  eq(C.plantNibbleRangePx, 50); eq(C.plantFrondEvery, 5);
+  eq(C.feedHoldIntervalSec, 0.1, "hold cadence unchanged for plants — same as pellets");
+});
+test("food panel: Food button shows the current selection; selectFood switches it", () => {
+  const s = makeScene();
+  eq(s.foodType, "standard", "default is standard");
+  eq(s.foodBtn.text.text, "Food: Std", "button label matches");
+  eq(s.foodBtn.icon.text, "🍤", "button icon matches");
+  s.selectFood("deluxe");
+  eq(s.foodType, "deluxe");
+  eq(s.foodBtn.text.text, "Food: Dlx");
+  eq(s.foodBtn.icon.text, "✨");
+  s.selectFood("plant");
+  eq(s.foodType, "plant");
+  eq(s.foodBtn.text.text, "Food: Plant");
+  eq(s.foodBtn.icon.text, "🌿");
+});
+test("food panel: open, pick a row, selects and closes (unlike Decor, which stays open)", () => {
+  const s = makeScene();
+  assert(s.foodPanel === null, "panel starts closed");
+  s.foodBtn.bg._handlers["pointerdown"]();
+  assert(s.foodPanel !== null, "Food click opens the panel");
+  assert(s.foodPanelBounds !== null, "panel has a hit rect");
+  eq(s.foodPanelBounds.x0, 0, "panel flush with the left edge");
+  eq(s.foodPanelBounds.x1, 300, "panel 300 wide");
+  assert(s.foodPanelBounds.y1 < G.SHOP.row1Y - G.SHOP.btnH / 2,
+    "panel bottom (" + s.foodPanelBounds.y1 + ") clears the top of the row-1 buttons");
+  assert(s.foodPanel.rows.standard && s.foodPanel.rows.deluxe && s.foodPanel.rows.plant, "three rows");
+  assert(s.foodPanel.rows.standard.label.text.indexOf("✓") >= 0, "selected row checked: " + s.foodPanel.rows.standard.label.text);
+  assert(s.foodPanel.rows.plant.label.text.indexOf("$40") >= 0, "plant row shows its price");
+  assert(s.foodPanel.rows.plant.label.text.indexOf("30 nibbles") >= 0, "plant row shows the nibbles");
+  // Pick the plant row: selection applies and the panel CLOSES.
+  s.foodPanel.rows.plant.rect._handlers["pointerdown"]();
+  eq(s.foodType, "plant", "row selection applied");
+  eq(s.foodPanel, null, "panel closed on selection");
+  eq(s.foodPanelBounds, null, "bounds cleared");
+  // Toggle closes too.
+  s.foodBtn.bg._handlers["pointerdown"]();
+  assert(s.foodPanel, "reopened");
+  s.foodBtn.bg._handlers["pointerdown"]();
+  eq(s.foodPanel, null, "toggle closes");
+});
+test("food panel: a click outside the panel closes it and drops nothing", () => {
+  const s = makeScene();
+  s.foodBtn.bg._handlers["pointerdown"]();
+  assert(s.foodPanel !== null, "panel open");
+  const moneyBefore = s.money;
+  s.onPointerDown({ x: 850, y: 150 });
+  eq(s.foodPanel, null, "click elsewhere closes the panel");
+  eq(s.money, moneyBefore, "closing the panel does not drop food");
+  eq(s.pellets.length, 0, "no pellet dropped by the closing click");
+  eq(s.feastPlants.length, 0, "no plant dropped either");
+  eq(s.feedHold, false, "no hold armed");
+});
+test("food panel: a click on the panel itself drops nothing and does not close it", () => {
+  const s = makeScene();
+  s.foodBtn.bg._handlers["pointerdown"]();
+  assert(s.foodPanel !== null, "panel open");
+  const moneyBefore = s.money;
+  s.onPointerDown({ x: G.FOOD_PANEL.cx, y: G.FOOD_PANEL.cy - 40 });
+  eq(s.money, moneyBefore, "clicking the panel does not drop food");
+  eq(s.pellets.length, 0, "no pellet from a panel click");
+  assert(s.foodPanel !== null, "clicking the panel does not close it");
+  eq(s.dragFish, null, "no fish grabbed through the panel");
+});
+test("food panel: opening one panel closes the other", () => {
+  const s = makeScene();
+  s.decorBtn.bg._handlers["pointerdown"]();
+  assert(s.decorPanel !== null, "decor open");
+  s.foodBtn.bg._handlers["pointerdown"]();
+  assert(s.foodPanel !== null, "food open");
+  eq(s.decorPanel, null, "decor closed when food opened");
+  s.decorBtn.bg._handlers["pointerdown"]();
+  assert(s.decorPanel !== null, "decor reopened");
+  eq(s.foodPanel, null, "food closed when decor opened");
+});
+test("food panel: each food type drops at its own cost", () => {
+  const s = makeScene();
+  s.money = 100;
+  s.selectFood("standard");
+  s.dropFood(480, 200);
+  eq(s.money, 98, "standard $2");
+  eq(s.pellets.length, 1, "one standard pellet");
+  s.selectFood("deluxe");
+  s.dropFood(480, 200);
+  eq(s.money, 93, "deluxe $5");
+  eq(s.pellets.length, 2, "one deluxe pellet");
+  eq(s.pellets[1].feeds, 2, "deluxe counts as 2 feeds");
+  s.selectFood("plant");
+  s.dropFood(480, 200);
+  eq(s.money, 53, "plant $40");
+  eq(s.feastPlants.length, 1, "one plant");
+});
+test("plant: dropFood with plant selected drops a plant for $40; broke drops nothing", () => {
+  const s = makeScene();
+  s.selectFood("plant");
+  s.money = 200;
+  eq(s.dropFood(480, 200), true, "drop succeeds");
+  eq(s.money, 160, "$40 charged");
+  eq(s.feastPlants.length, 1, "one plant");
+  eq(s.pellets.length, 0, "no pellet");
+  const p = s.feastPlants[0];
+  eq(p.nibbles, 30, "30 nibbles");
+  eq(p.sinking, true, "sinking");
+  eq(p.counter.text, "30", "counter starts at 30");
+  const broke = makeScene();
+  broke.selectFood("plant");
+  broke.money = 0;
+  eq(broke.dropFood(480, 200), false, "broke drop fails");
+  eq(broke.feastPlants.length, 0, "no plant");
+  assert(broke.toastText.text.indexOf("Not enough money") >= 0, "broke toast: " + broke.toastText.text);
+});
+test("plant: sinks ~25 px/s with sway, then anchors on the floor and never disappears", () => {
+  const s = makeScene();
+  for (const f of s.fish) f.eatCooldownSec = 999; // nobody nibbles mid-test
+  const p = s.spawnFeastPlant(480, 150);
+  step(s, 1, () => { for (const f of s.fish) f.eatCooldownSec = 999; });
+  approx(p.container.y, 175, 1, "sank ~25px in 1s, got " + p.container.y);
+  assert(Math.abs(p.container.x - 480) <= 8, "sway within ±8px, x=" + p.container.x);
+  const q = s.spawnFeastPlant(480, 400);
+  step(s, 2, () => { for (const f of s.fish) f.eatCooldownSec = 999; });
+  eq(q.container.y, G.CONFIG.floorY - 14, "anchored at floorY - 14");
+  eq(q.sinking, false, "no longer sinking");
+  eq(q.container.x, q.baseX, "sway stops once anchored");
+  step(s, 5, () => { for (const f of s.fish) f.eatCooldownSec = 999; });
+  assert(s.feastPlants.includes(q), "still there after 5s on the floor — never disappears");
+  eq(q.nibbles, 30, "uneaten");
+  assert(!q.container.destroyed, "container not destroyed");
+});
+test("plant: a nibble is 1 feed — hunger resets and growth progresses", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 200, "guppy");
+  f.hungerSec = 10; f.lastFedSec = 10; f.feeds = 2;
+  f.targetX = 480; f.targetY = 200; f.wanderTimer = 100;
+  const p = s.spawnFeastPlant(480, 200);
+  step(s, 0.5);
+  eq(f.feeds, 3, "one nibble = one feed");
+  eq(f.stage, 1, "3 feeds grows a guppy to medium");
+  assert(f.hungerSec < 1, "hunger reset by the nibble, hungerSec=" + f.hungerSec);
+  eq(p.nibbles, 29, "one nibble taken");
+  assert(f.plantChewSec > 0, "chew pause started");
+});
+test("plant: fronds are lost every 5 nibbles, and the plant vanishes at 0", () => {
+  const s = makeScene();
+  const p = s.spawnFeastPlant(480, 200);
+  const visible = () => p.fronds.filter((f) => f.visible).length;
+  eq(visible(), 6, "6 fronds at 30 nibbles");
+  p.nibbles = 26; s.updatePlantFronds(p); eq(visible(), 6, "26 nibbles: still 6");
+  p.nibbles = 25; s.updatePlantFronds(p); eq(visible(), 5, "25 nibbles: 5");
+  p.nibbles = 21; s.updatePlantFronds(p); eq(visible(), 5, "21 nibbles: still 5");
+  p.nibbles = 20; s.updatePlantFronds(p); eq(visible(), 4, "20 nibbles: 4");
+  p.nibbles = 6; s.updatePlantFronds(p); eq(visible(), 2, "6 nibbles: 2");
+  p.nibbles = 1; s.updatePlantFronds(p); eq(visible(), 1, "1 nibble: 1");
+  eq(p.counter.text, "1", "counter shows the nibbles left");
+  // Vanish: one nibble left, a fish takes it, the plant is gone.
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 200, "guppy");
+  f.targetX = 480; f.targetY = 200; f.wanderTimer = 100;
+  p.nibbles = 1; s.updatePlantFronds(p);
+  step(s, 0.5);
+  assert(!s.feastPlants.includes(p), "plant removed at 0 nibbles");
+  assert(p.container.destroyed, "container destroyed");
+});
+test("plant: max 3 — a fourth drop is blocked with a toast", () => {
+  const s = makeScene();
+  s.selectFood("plant");
+  s.money = 5000;
+  for (let i = 0; i < 3; i++) assert(s.dropFood(200 + i * 200, 150), "drop " + (i + 1) + " succeeds");
+  eq(s.feastPlants.length, 3, "three plants");
+  eq(s.money, 5000 - 120, "$120 charged");
+  eq(s.dropFood(480, 150), false, "fourth drop blocked");
+  eq(s.feastPlants.length, 3, "still three");
+  eq(s.money, 5000 - 120, "no further charge");
+  assert(s.toastText.text.indexOf("3") >= 0, "cap toast: " + s.toastText.text);
+});
+test("plant: hold-down spawns plants at the pellet repeat rate, then the cap stops it", () => {
+  const s = makeScene();
+  s.selectFood("plant");
+  s.money = 5000;
+  s.onPointerDown({ x: 850, y: 150 });
+  eq(s.feastPlants.length, 1, "the press drops one plant");
+  eq(s.feedHold, true, "hold armed");
+  step(s, 0.3, () => keepFed(s));
+  eq(s.feastPlants.length, 3, "press + 2 cadence drops in 0.3s, got " + s.feastPlants.length);
+  eq(s.feedHold, false, "hold cancelled once the cap blocks");
+  eq(s.money, 5000 - 120, "$120 charged for 3 plants");
+});
+test("plant: sprint applies to a sinking plant and to an anchored plant in the 40-120px window", () => {
+  // Sinking plant 80px away.
+  let t = sprintScene();
+  t.scene.spawnFeastPlant(t.fish.sprite.x + 80, t.fish.sprite.y);
+  step(t.scene, 0.1);
+  assert(t.fish.sprintSec > 0, "sprint to a sinking plant, sprintSec=" + t.fish.sprintSec);
+  // Anchored plant 80px away (a plant is food all the way down).
+  t = sprintScene();
+  const anchored = t.scene.spawnFeastPlant(t.fish.sprite.x + 80, G.CONFIG.floorY - 14);
+  anchored.sinking = false;
+  t.fish.sprite.y = G.CONFIG.floorY - 14;
+  t.fish.targetY = G.CONFIG.floorY - 14;
+  step(t.scene, 0.1);
+  assert(t.fish.sprintSec > 0, "sprint to an anchored plant, sprintSec=" + t.fish.sprintSec);
+  // Too far: no sprint.
+  t = sprintScene();
+  t.scene.spawnFeastPlant(t.fish.sprite.x + 200, t.fish.sprite.y);
+  step(t.scene, 0.1);
+  eq(t.fish.sprintSec, 0, "200px plant: no sprint");
+  // Too close: no sprint.
+  t = sprintScene();
+  t.scene.spawnFeastPlant(t.fish.sprite.x + 30, t.fish.sprite.y);
+  step(t.scene, 0.1);
+  eq(t.fish.sprintSec, 0, "30px plant: no sprint");
+});
+test("uncap: maxFishCap is Infinity while ON, normal caps while OFF", () => {
+  const s = makeScene();
+  eq(s.maxFishCap(), 16, "base cap 16");
+  s.tankUpgraded = true;
+  eq(s.maxFishCap(), 28, "upgraded cap 28");
+  s.toggleUncapFish();
+  eq(s.maxFishCap(), Infinity, "uncapped");
+  eq(s.fishText.text, "Fish: 2 / ∞", "HUD shows no cap: " + s.fishText.text);
+  s.toggleUncapFish();
+  eq(s.maxFishCap(), 28, "cap back on");
+});
+test("uncap: buying past the cap works while ON, blocked again when OFF", () => {
+  const s = makeScene();
+  s.money = 5000;
+  while (s.fish.length < s.maxFishCap()) s.spawnFish(100, 100, "guppy");
+  eq(s.fish.length, 16, "tank full");
+  s.buyFish("guppy");
+  eq(s.fish.length, 16, "denied at the cap");
+  s.toggleUncapFish();
+  s.buyFish("guppy");
+  eq(s.fish.length, 17, "bought past the cap while uncapped");
+  eq(s.fishText.text, "Fish: 17 / ∞", "HUD shows no cap");
+  s.toggleUncapFish();
+  s.buyFish("guppy");
+  eq(s.fish.length, 17, "denied again once the cap is back on");
+  eq(s.fishText.text, "Fish: 17 / 16", "HUD shows the cap again");
+});
+test("uncap: breeding pairs form past the cap while ON, not while OFF", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  // 14 small guppies fill the tank; 2 large, recently-fed guppies
+  // are the would-be pair. At 16 fish the cap blocks pairing.
+  for (let i = 0; i < 14; i++) s.spawnFish(100 + i * 10, 100, "guppy");
+  const a = s.spawnFish(400, 200, "guppy");
+  const b = s.spawnFish(500, 200, "guppy");
+  for (const f of [a, b]) {
+    f.feeds = 6; f.stage = 2; s.setFishStageVisual(f);
+    f.hungerSec = 0; f.lastFedSec = 0;
+  }
+  eq(s.fish.length, 16, "tank full");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.breedingPairs.length, 0, "no pair at the cap");
+  s.toggleUncapFish();
+  step(s, 0.5, () => keepFed(s));
+  eq(s.breedingPairs.length, 1, "pair forms once uncapped");
+});
+test("uncap: an egg hatches past the cap while ON, waits while OFF", () => {
+  const s = makeScene();
+  while (s.fish.length < s.maxFishCap()) s.spawnFish(100, 100, "guppy");
+  eq(s.fish.length, 16, "tank full");
+  const eggSprite = s.add.image(480, G.CONFIG.floorY, "egg");
+  s.eggs.push({ sprite: eggSprite, species: "guppy", waitSec: 0, sinking: false, pulse: 0 });
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 16, "egg waits at the cap");
+  eq(s.eggs.length, 1, "egg still there");
+  s.toggleUncapFish();
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 17, "egg hatched once uncapped");
+  eq(s.eggs.length, 0, "egg gone");
+});
+test("uncap: a chest pays a guppy past the cap while ON, money instead while OFF", () => {
+  const s = makeScene();
+  while (s.fish.length < s.maxFishCap()) s.spawnFish(100, 100, "guppy");
+  const origRandom = Math.random;
+  try {
+    Math.random = () => 0.9; // guppy roll (>= 2/3)
+    s.startEvent("chest");
+    s.openChest();
+    eq(s.fish.length, 16, "at the cap: no guppy");
+    eq(s.money, 300, "$100 instead (200 + 100)");
+    s.toggleUncapFish();
+    s.startEvent("chest");
+    s.openChest();
+    eq(s.fish.length, 17, "uncapped: the guppy joins");
+  } finally {
+    Math.random = origRandom;
+  }
+});
+test("uncap: resetTank turns the toggle back OFF", () => {
+  const s = makeScene();
+  s.toggleUncapFish();
+  eq(s.uncapFish, true, "on");
+  s.resetTank();
+  eq(s.uncapFish, false, "reset clears it");
+  eq(s.maxFishCap(), 16, "cap back to 16");
 });
 
 // ===========================================================================

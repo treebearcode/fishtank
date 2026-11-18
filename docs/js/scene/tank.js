@@ -17,7 +17,7 @@ import { goalIsMet, countLargeFish } from "../economy.js";
 import { sfx } from "../sound.js";
 import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
-  makePelletTexture, makeDeluxePelletTexture, makeCrabTexture, makeFeederBotTexture,
+  makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeCrabTexture, makeFeederBotTexture,
   makeBotLightTexture, makeEggTexture, makeTreasureChestTexture,
   makeJellyfishTexture, makeJellyBurstTexture,
 } from "../textures.js";
@@ -39,6 +39,7 @@ export class TankScene extends Phaser.Scene {
     this.fish = [];      // { sprite, stage, feeds, hungerSec, coinTimer, ... }
     this.deadFish = [];  // { sprite, species, vx, vy, surfaceSec, ... } — visual only, never counted
     this.pellets = [];   // { sprite, vy }
+    this.feastPlants = []; // { container, counter, fronds, nibbles, sinking, ... } — shared food, see scene/feeding.js
     this.coins = [];     // { container, img, value, vy, bottomSec, fading }
     this.bubbles = [];
     this.snail = null;   // { sprite, targetCoin } once bought
@@ -50,11 +51,12 @@ export class TankScene extends Phaser.Scene {
     // All of this state resets on Restart / Clear Tank, and none of it
     // is saved anywhere (no localStorage, by design).
     this.totalBanked = 0;        // lifetime $ collected this session
-    this.foodType = "standard";  // "standard" ($2, 1 feed) or "deluxe" ($5, 2 feeds)
+    this.foodType = "standard";  // "standard" ($2, 1 feed), "deluxe" ($5, 2 feeds), or "plant" ($40, 30 nibbles)
     this.snailUpgraded = false;  // Turbo Speed Upgrade bought?
     this.decorations = { coral: false, chest: false, castle: false };
     this.decorSprites = {};      // coral/chest/castle Graphics, hidden until bought
     this.tankUpgraded = false;   // fish cap 16 -> 28
+    this.uncapFish = false;      // playtest toggle: the fish cap is ignored while ON (resets on reload / resetTank)
     this.speedMult = 1;          // 1 or 2 (2x toggle)
     this.goalComplete = false;
     this.goalPopupShown = false;
@@ -94,8 +96,12 @@ export class TankScene extends Phaser.Scene {
     // DESTROYED on close — never merely hidden — so a closed panel can
     // never block fish clicks. decorPanelBounds is its hit rect while
     // open (used by onPointerDown to swallow clicks on the panel).
+    // FOOD PANEL: the same pattern for the Food button — one panel
+    // open at a time, so the two share the dispatcher check.
     this.decorPanel = null;
     this.decorPanelBounds = null;
+    this.foodPanel = null;
+    this.foodPanelBounds = null;
     // POINTER DISPATCHER state — one active pointer action.
     this.dragFish = null;      // fish being poked / grabbed, or null
     this.dragStartX = 0;
@@ -166,6 +172,7 @@ export class TankScene extends Phaser.Scene {
     makeCrabTexture(this);
     makePelletTexture(this);
     makeDeluxePelletTexture(this);
+    makeFeastPlantFrondTexture(this); // one leaf blade, reused per frond
     makeFeederBotTexture(this);
     makeBotLightTexture(this);
     makeEggTexture(this);
@@ -221,7 +228,7 @@ export class TankScene extends Phaser.Scene {
     //     text (what it does, price, current state) lives in the FIXED
     //     description bar just above the buttons.
     //     Row 1: the 4 species + Turbo + Claws + Feeder + Magnet.
-    //     Row 2: food Std/Dlx + Decor + Tank + 2x Speed + Sell.
+    //     Row 2: Food + Uncap + Decor + Tank + 2x Speed + Sell.
     //     Sell is a DROP ZONE, not a purchase — clicking it alone does
     //     nothing; drag a fish onto it to sell. Decor opens a panel
     //     above the shop (see toggleDecorPanel) instead of buying
@@ -253,11 +260,11 @@ export class TankScene extends Phaser.Scene {
     // "Magnet L1 · $400".
     this.magnetBtn = this.makeShopButton(SHOP.slotW * 8, R1, BW * 2 + 6, BH, "Magnet $250", () => this.buyMagnet(), "🧲",
       () => this.magnetTip());
-    // Row 2 (y = 514): food selector + decor + tank + speed + sell.
-    this.foodStdBtn = this.makeShopButton(col(0), R2, BW, BH, "Std $2", () => this.selectFood("standard"), "🍤",
-      () => "Standard food — $2 per pellet, 1 feed. Click water to drop it.");
-    this.foodDeluxeBtn = this.makeShopButton(col(1), R2, BW, BH, "Dlx $5", () => this.selectFood("deluxe"), "✨",
-      () => "Deluxe food — $5 per pellet, 2 feeds. The fish glows gold when it eats one.");
+    // Row 2 (y = 514): food selector + uncap toggle + decor + tank + speed + sell.
+    this.foodBtn = this.makeShopButton(col(0), R2, BW, BH, "Food: Std", () => this.toggleFoodPanel(), "🍤",
+      () => this.foodTip());
+    this.uncapBtn = this.makeShopButton(col(1), R2, BW, BH, "Uncap: OFF", () => this.toggleUncapFish(), "∞",
+      () => this.uncapTip());
     this.decorBtn = this.makeShopButton(col(2), R2, BW, BH, "Decor", () => this.toggleDecorPanel(), "🪸",
       () => this.decorTip());
     this.tankBtn = this.makeShopButton(col(3), R2, BW, BH, "Tank", () => this.buyTankUpgrade(), "🐠",
@@ -363,6 +370,7 @@ export class TankScene extends Phaser.Scene {
     this.updateFeedHold(dt);
     this.updateFeederDrop(dt);
     this.updatePellets(dt);
+    this.updateFeastPlants(dt, time);
     this.updateFish(dt);
     this.updateDeadFish(dt, time);
     this.updateEvents(dt, time);

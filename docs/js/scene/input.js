@@ -29,15 +29,18 @@ export const inputMixin = {
     this.pointerX = pointer.x;
     this.pointerY = pointer.y;
     this.pointerSeen = true;
-    // DECOR PANEL: a click ON the panel belongs to the panel (its rows
-    // have their own handlers) — the dispatcher must not also drop
-    // food or grab a fish behind it. A click elsewhere in the tank
-    // closes the panel and does nothing else (one click, one action —
-    // no surprise food drop).
-    if (this.decorPanelBounds) {
-      const b = this.decorPanelBounds;
+    // PANELS (Decor / Food): a click ON an open panel belongs to the
+    // panel (its rows have their own handlers) — the dispatcher must
+    // not also drop food or grab a fish behind it. A click elsewhere
+    // in the tank closes the panel and does nothing else (one click,
+    // one action — no surprise food drop). Only one panel is open at
+    // a time (opening one closes the other), but both bounds are
+    // checked here so a stale open panel can never leak clicks.
+    if (this.decorPanelBounds || this.foodPanelBounds) {
+      const b = this.decorPanelBounds || this.foodPanelBounds;
       if (pointer.x >= b.x0 && pointer.x <= b.x1 && pointer.y >= b.y0 && pointer.y <= b.y1) return;
       this.closeDecorPanel();
+      this.closeFoodPanel();
       return;
     }
     const coins = this.coins.map((c) => ({ x: c.container.x, y: c.container.y }));

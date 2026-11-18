@@ -1,7 +1,8 @@
-// scene/feeding.js — TankScene mixin: food, pellets, bubbles, and the
-// floating feedback text. The pellet type follows the shop selector:
-// Standard = $2 / 1 feed, Deluxe = $5 / 2 feeds, gold and bigger so the
-// two are easy to tell apart.
+// scene/feeding.js — TankScene mixin: food, pellets, feast plants,
+// bubbles, and the floating feedback text. The food type follows the
+// Food button's selection: Standard = $2 / 1 feed, Deluxe = $5 / 2
+// feeds (gold and bigger so the two are easy to tell apart), Feast
+// Plant = $40 / 30 nibbles shared by the whole tank.
 
 import { CONFIG, speciesDef } from "../config.js";
 import { postMealDriftTarget } from "../animation.js";
@@ -10,9 +11,11 @@ import { stageForFeeds, coinValueForStage, coinValueWithBonus, decorCount, money
 import { sfx } from "../sound.js";
 
 export const feedingMixin = {
-  // The pellet type follows the shop selector. dropFood() pays and
-  // calls dropPelletAt(); the feeder-bot pays $2 and calls it directly.
+  // The food type follows the Food button's selection. dropFood()
+  // pays and drops whatever is selected — a pellet, or a feast plant.
+  // The feeder-bot pays $2 and calls dropPelletAt() directly.
   dropFood(x, y) {
+    if (this.foodType === "plant") return this.dropPlant(x, y);
     const isDeluxe = this.foodType === "deluxe";
     const cost = isDeluxe ? CONFIG.deluxeFoodCost : CONFIG.foodCost;
     if (this.money < cost) {
@@ -26,6 +29,123 @@ export const feedingMixin = {
     this.updateShopUI();
     this.updateTopUI();
     return true;
+  },
+
+  // FEAST PLANT: $40 for 30 nibbles, dropped from the cursor like any
+  // food. Max 3 at once — the cap is what stops hold-to-feed burning
+  // $40 a drop forever, and a failed drop cancels the hold (see
+  // updateFeedHold), so the player has to press again once a plant
+  // is finished. No Tank Upgrade gate: the $40 cost IS the gate.
+  dropPlant(x, y) {
+    if (this.feastPlants.length >= CONFIG.plantMax) {
+      this.toast("Only " + CONFIG.plantMax + " feast plants at once — wait for the fish to finish one!");
+      sfx.denied();
+      return false;
+    }
+    if (this.money < CONFIG.plantCost) {
+      this.toast("Not enough money for food! Collect some coins first.");
+      sfx.denied();
+      return false;
+    }
+    this.money -= CONFIG.plantCost;
+    this.spawnFeastPlant(x, y);
+    sfx.pop();
+    this.updateShopUI();
+    this.updateTopUI();
+    return true;
+  },
+
+  // A feast plant is one container: a stem, six frond blades fanning
+  // up from the base, and a counter above it. The container's
+  // position is the plant's centre (for steering and nibble range);
+  // the base sits 14px below it, so the plant anchors with its base
+  // on the floor (floorY - 14). Fronds are hidden one per 5 nibbles
+  // (see updatePlantFronds) — the depletion is visible at a glance.
+  spawnFeastPlant(x, y) {
+    const px = Phaser.Math.Clamp(x, 20, CONFIG.width - 20);
+    const py = Phaser.Math.Clamp(y, 44, CONFIG.waterBottom - 30);
+    const container = this.add.container(px, py).setDepth(3);
+    const stem = this.add.rectangle(0, 4, 5, 24, 0x2f7a3d);
+    container.add(stem);
+    const fronds = [];
+    const angles = [-50, -30, -10, 10, 30, 50];
+    angles.forEach((deg, i) => {
+      const f = this.add.image(0, 6, "feast-plant-frond").setOrigin(0.5, 1);
+      f.rotation = deg * Math.PI / 180; // pivot at the base, fan outward
+      f.setScale(1, 0.85 + (i % 3) * 0.15);
+      container.add(f);
+      fronds.push(f);
+    });
+    const counter = this.add.text(0, -48, String(CONFIG.plantNibbles), { fontSize: "12px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#0b2a3acc", padding: { x: 4, y: 2 } }).setOrigin(0.5, 0.5);
+    container.add(counter);
+    const plant = {
+      container, counter, fronds,
+      nibbles: CONFIG.plantNibbles,
+      sinking: true,      // still dropping toward the floor
+      biteTimer: 0,       // plant-wide: one bite at most every 0.4s
+      swayPhase: Math.random() * Math.PI * 2,
+      baseX: px,          // sway oscillates around this x while sinking
+    };
+    this.feastPlants.push(plant);
+    return plant;
+  },
+
+  // Fronds + counter, from the nibble count: one frond lost per 5
+  // nibbles (6 at 30, 5 at 25, ... 1 at 1-5). Called on every nibble
+  // and directly by tests.
+  updatePlantFronds(plant) {
+    const visible = Math.ceil(plant.nibbles / CONFIG.plantFrondEvery);
+    plant.fronds.forEach((f, i) => f.setVisible(i < visible));
+    plant.counter.setText(String(plant.nibbles));
+  },
+
+  // Plants sink slowly (25 px/s, swaying ±8px), anchor on the floor,
+  // and get nibbled. A plant is NEVER destroyed at the floor — unlike
+  // pellets, it stays until fully eaten. The nearest eligible fish
+  // within 50px takes one bite: not grabbed, not on its 0.5s pellet
+  // cooldown, not on its 1.5s plant chew pause, and the plant itself
+  // must be past its 0.4s bite timer.
+  updateFeastPlants(dt, time) {
+    for (const plant of [...this.feastPlants]) {
+      if (plant.sinking) {
+        plant.container.y += CONFIG.plantSinkPxS * dt;
+        plant.container.x = plant.baseX + Math.sin(time / 700 + plant.swayPhase) * CONFIG.plantSwayPx;
+        if (plant.container.y >= CONFIG.floorY - 14) {
+          plant.container.y = CONFIG.floorY - 14;
+          plant.container.x = plant.baseX;
+          plant.sinking = false;
+        }
+      }
+      if (plant.biteTimer > 0) plant.biteTimer = Math.max(0, plant.biteTimer - dt);
+      if (plant.biteTimer <= 0 && plant.nibbles > 0) {
+        let best = null, bestD = CONFIG.plantNibbleRangePx * CONFIG.plantNibbleRangePx;
+        for (const f of this.fish) {
+          if (f.grabbed || (f.eatCooldownSec || 0) > 0 || (f.plantChewSec || 0) > 0) continue;
+          const dx = f.sprite.x - plant.container.x, dy = f.sprite.y - plant.container.y;
+          const d = dx * dx + dy * dy;
+          if (d < bestD) { bestD = d; best = f; }
+        }
+        if (best) this.nibblePlant(best, plant);
+      }
+      if (plant.nibbles <= 0) {
+        plant.container.destroy();
+        this.feastPlants.splice(this.feastPlants.indexOf(plant), 1);
+        this.toast("The fish finished the feast plant!");
+        sfx.pop();
+      }
+    }
+  },
+
+  // One fish takes one bite of a plant: 1 full feed (same as a
+  // pellet), plus the plant's own pacing — this fish waits 1.5s
+  // before its next plant bite, and the plant waits 0.4s before
+  // anyone's next bite.
+  nibblePlant(fish, plant) {
+    plant.nibbles -= 1;
+    plant.biteTimer = CONFIG.plantGlobalSec;
+    fish.plantChewSec = CONFIG.plantChewSec;
+    this.applyFeed(fish, 1, plant.container.x, plant.container.y);
+    this.updatePlantFronds(plant);
   },
 
   // The shared pellet spawner. Returns false if the pellet could not
@@ -74,24 +194,32 @@ export const feedingMixin = {
     // inside a pellets.filter() loop, and mutating the array being
     // filtered can skip the next pellet. The filter's `return false`
     // in updatePellets() is what removes this pellet.
-    fish.feeds += pellet.feeds || 1;
+    this.applyFeed(fish, pellet.feeds || 1, pellet.sprite.x, pellet.sprite.y);
+    if (pellet.deluxe) fish.glowSec = 1.5;
+  },
+
+  // A fish ate `feeds` feeds at (foodX, foodY): hunger reset, feed
+  // count, growth, post-meal drift, bubble, sound, goal UI. Shared
+  // by pellets (feedFish) and feast plants (nibblePlant) — one place,
+  // so a bite and a pellet can never drift apart in what they do.
+  applyFeed(fish, feeds, foodX, foodY) {
+    fish.feeds += feeds;
     fish.hungerSec = 0;   // a meal resets the hunger clock
     fish.lastFedSec = 0;  // and the breeding "recently fed" clock
     // Eating starts the cooldown (0.5s) — this fish cannot eat another
     // pellet until the cooldown ticks down in updateFish(). That is the
     // only anti-hogging.
     fish.eatCooldownSec = CONFIG.FEED_COOLDOWN_S;
-    // POST-MEAL DRIFT: the fed fish drifts ~60px away from the pellet
+    // POST-MEAL DRIFT: the fed fish drifts ~60px away from the food
     // for ~1s at normal swim speed (see the steering code in fish.js).
     // It is steering only, NOT a lockout — the 0.5s cooldown above is
-    // unchanged, and if the drifting fish bumps into a pellet it may
-    // still eat it once the cooldown ends. The drift just stops the
-    // whole stack sitting on the food: the fed fish clears out, the
-    // hungry ones stay behind.
-    const drift = postMealDriftTarget(fish.sprite.x, fish.sprite.y, pellet.sprite.x, pellet.sprite.y, CONFIG.postMealDriftPx);
+    // unchanged, and if the drifting fish bumps into food it may still
+    // eat it once the cooldown ends. The drift just stops the whole
+    // stack sitting on the food: the fed fish clears out, the hungry
+    // ones stay behind.
+    const drift = postMealDriftTarget(fish.sprite.x, fish.sprite.y, foodX, foodY, CONFIG.postMealDriftPx);
     fish.driftX = drift.x; fish.driftY = drift.y;
     fish.driftSec = CONFIG.postMealDriftSec;
-    if (pellet.deluxe) fish.glowSec = 1.5;
     // Growth thresholds come from the fish's species (Chomper grows at
     // 4/8 feeds, everyone else at 3/6).
     const newStage = stageForFeeds(fish.feeds, fish.species);

@@ -2,13 +2,22 @@
 // Purchase handlers, the decor panel, the magnet label/tip, selling a
 // fish, the food selector, and the 2x speed toggle.
 
-import { CONFIG, speciesDef, DECOR_PANEL } from "../config.js";
+import { CONFIG, speciesDef, DECOR_PANEL, FOOD_PANEL } from "../config.js";
 import { moneyFmt, addMoney, decorCount, coinValueForStage, coinValueWithBonus, sellPriceForStage } from "../economy.js";
 import { MAGNET_LEVELS, magnetLevelCost } from "../magnet.js";
 import { sfx } from "../sound.js";
 
 const DECOR_NAMES = { coral: "Coral", chest: "Treasure Chest", castle: "Castle" };
 const DECOR_TIP_NAMES = { coral: "Coral", chest: "Treasure", castle: "Castle" };
+
+// FOOD TYPES — the three things the Food button can drop. Selection
+// is free; the cost is paid per drop (see dropFood in scene/feeding.js).
+const FOOD_TYPES = [
+  { key: "standard", icon: "🍤", name: "Standard Pellet", cost: CONFIG.foodCost, desc: "1 feed" },
+  { key: "deluxe", icon: "✨", name: "Deluxe Pellet", cost: CONFIG.deluxeFoodCost, desc: "2 feeds" },
+  { key: "plant", icon: "🌿", name: "Feast Plant", cost: CONFIG.plantCost, desc: "30 nibbles" },
+];
+function foodDef(type) { return FOOD_TYPES.find((f) => f.key === type) || FOOD_TYPES[0]; }
 
 export const shopMixin = {
   // Buy any species. Same rules for all: enough money and room under
@@ -75,12 +84,95 @@ export const shopMixin = {
     this.updateTopUI();
   },
 
-  // Food selector. Free to switch — the cost is paid per pellet when
-  // you drop it. The highlight is updated by updateShopUI().
+  // Food selector. Free to switch — the cost is paid per drop when
+  // you drop it. The highlight is updated by updateShopUI(), and the
+  // panel closes on selection (a food choice is one tap, unlike the
+  // Decor panel, which stays open for repeat buys).
   selectFood(type) {
     this.foodType = type;
+    this.closeFoodPanel();
     sfx.pop();
     this.updateShopUI();
+  },
+
+  // The Food button's short label + icon, from the current selection
+  // ("Food: Std" / "Food: Dlx" / "Food: Plant").
+  foodLabel() {
+    const f = foodDef(this.foodType);
+    return "Food: " + (f.key === "standard" ? "Std" : f.key === "deluxe" ? "Dlx" : "Plant");
+  },
+
+  foodIcon() { return foodDef(this.foodType).icon; },
+
+  foodTip() {
+    const f = foodDef(this.foodType);
+    return "Food — click to choose what you drop. Now: " + f.name + " — $" + f.cost + " (" + f.desc + ").";
+  },
+
+  // FOOD PANEL — one shared "Food" button opens it, mirroring the
+  // Decor panel (same shape: header + 3 rows, same open/close
+  // rules, same dispatcher treatment in scene/input.js). The rows
+  // list the three food types with icon + name + price + what one
+  // drop buys; the selected row shows ✓. Clicking a row SELECTS
+  // that food and closes the panel. Only one panel is open at a
+  // time — opening Food closes Decor, and vice versa.
+  toggleFoodPanel() {
+    if (this.foodPanel) { this.closeFoodPanel(); return; }
+    this.openFoodPanel();
+  },
+
+  openFoodPanel() {
+    if (this.foodPanel) return;
+    this.closeDecorPanel();
+    const panel = this.add.container(FOOD_PANEL.cx, FOOD_PANEL.cy).setDepth(14);
+    const bg = this.add.rectangle(0, 0, FOOD_PANEL.w, FOOD_PANEL.h, 0x0b2a3a, 0.95).setStrokeStyle(2, 0xffd23f);
+    panel.add(bg);
+    const header = this.add.text(0, -FOOD_PANEL.h / 2 + 12, "Food — pick what you drop", { fontSize: "13px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    panel.add(header);
+    panel.rows = {};
+    FOOD_TYPES.forEach((row, i) => {
+      const ry = -16 + i * 26;
+      const selected = this.foodType === row.key;
+      const rect = this.add.rectangle(0, ry, FOOD_PANEL.w - 20, 22, selected ? 0xffd23f : 0x2a5a75, 1).setInteractive({ useHandCursor: true });
+      const label = this.add.text(0, ry, row.icon + " " + row.name + " — $" + row.cost + " (" + row.desc + ")" + (selected ? " ✓" : ""), { fontSize: "13px", color: selected ? "#12394d" : "#cfeeff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+      rect.on("pointerdown", () => { if (this.started && !this.paused) this.selectFood(row.key); });
+      panel.add(rect);
+      panel.add(label);
+      panel.rows[row.key] = { rect, label };
+    });
+    this.foodPanel = panel;
+    this.foodPanelBounds = {
+      x0: FOOD_PANEL.cx - FOOD_PANEL.w / 2, x1: FOOD_PANEL.cx + FOOD_PANEL.w / 2,
+      y0: FOOD_PANEL.cy - FOOD_PANEL.h / 2, y1: FOOD_PANEL.cy + FOOD_PANEL.h / 2,
+    };
+    sfx.pop();
+  },
+
+  closeFoodPanel() {
+    if (!this.foodPanel) return;
+    this.foodPanel.destroy();
+    this.foodPanel = null;
+    this.foodPanelBounds = null;
+  },
+
+  // UNCAP FISH — a free playtest toggle, not a purchase. While ON,
+  // maxFishCap() returns Infinity, so buying, breeding, egg hatching,
+  // and chest rewards all ignore the cap (see ui.js). Session-only:
+  // it resets on reload and on Reset Tank (resetTank clears it).
+  toggleUncapFish() {
+    this.uncapFish = !this.uncapFish;
+    sfx.pop();
+    this.toast(this.uncapFish
+      ? "Fish cap OFF — buy, breed and hatch without limits. Playtest tool, resets on reload."
+      : "Fish cap back ON — 16 fish, 28 with the Tank Upgrade.");
+    this.updateShopUI();
+    this.updateTopUI();
+  },
+
+  uncapTip() {
+    return this.uncapFish
+      ? "Uncap Fish: ON — the fish cap is ignored (buy / breed / hatch). Free playtest toggle, resets on reload."
+      : "Uncap Fish: OFF — click to remove the fish cap for playtesting. Free, resets on reload.";
   },
 
   // Decorations — one of each, max. The bonus is +5% coin value each
@@ -127,6 +219,7 @@ export const shopMixin = {
 
   openDecorPanel() {
     if (this.decorPanel) return;
+    this.closeFoodPanel(); // only one panel open at a time
     const panel = this.add.container(DECOR_PANEL.cx, DECOR_PANEL.cy).setDepth(14);
     const bg = this.add.rectangle(0, 0, DECOR_PANEL.w, DECOR_PANEL.h, 0x0b2a3a, 0.95).setStrokeStyle(2, 0xffd23f);
     panel.add(bg);

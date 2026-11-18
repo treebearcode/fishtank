@@ -27,11 +27,15 @@ deploys this repo's `docs/` folder.)
   $1 → $1.05 / $1.10 / $1.15, $5 → $5.25 / $5.50 / $5.75. The HUD shows
   "$12" when whole, "$12.35" when there are cents. Buy costs and sell
   prices stay whole dollars.
-- **Feeding:** Standard $2 = 1 feed, Deluxe $5 = 2 feeds. Fish chase the
-  nearest pellet and first arrival wins — they fight over food. A 0.5s
-  eat cooldown is the only anti-hogging. Overlapping fish drift apart,
-  and a fish that just ate drifts away so the next pellet reaches a
-  hungry fish.
+- **Feeding:** one "Food" button opens a panel with three food types —
+  Standard $2 = 1 feed, Deluxe $5 = 2 feeds, Feast Plant $40 = 30 nibbles
+  shared by the whole tank. The plant drops from the cursor, sinks slowly,
+  anchors on the floor until fully eaten, and loses a frond every 5 nibbles
+  (max 3 at once). Fish chase the nearest food and first arrival wins — they
+  fight over food. A 0.5s eat cooldown is the only anti-hogging for pellets
+  (plants add a 1.5s chew pause per fish and one bite per 0.4s per plant).
+  Overlapping fish drift apart, and a fish that just ate drifts away so the
+  next pellet reaches a hungry fish.
 - **Dynamic speeds:** every fish rolls its own tempo (0.85–1.2× species
   speed) at spawn, hungry fish hurry (1.25×) while just-fed fish drift
   lazily (0.9×), and a fish chasing a sinking pellet 40–120px away
@@ -73,8 +77,9 @@ deploys this repo's `docs/` folder.)
 - **Decorations:** one "Decor" button opens a panel with Coral $75,
   Treasure Chest $100, Castle $150 — +5% coin value each (max +15%),
   paid in cents.
-- **Tank upgrade** $200: fish cap 16 → 28. **2x Speed** toggle (free):
-  speeds everything, hunger included.
+- **Tank upgrade** $200: fish cap 16 → 28. **Uncap Fish** toggle (free,
+  playtest only, resets on reload): removes the cap entirely while ON.
+  **2x Speed** toggle (free): speeds everything, hunger included.
 - **Input:** click water = drop food, click coin = collect (UI > coins >
   fish > water priority, one dispatcher), tap fish = poke, drag fish =
   move it, drag onto Sell = sell it (prices depend on species and size).

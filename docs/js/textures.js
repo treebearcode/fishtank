@@ -358,6 +358,23 @@ export function makeDeluxePelletTexture(scene) {
   return key;
 }
 
+// Feast Plant frond — one leaf blade, reused for all six fronds of a
+// plant (rotated/scaled per frond in spawnFeastPlant). The blade is
+// its own texture, not baked into one plant image, because a plant
+// loses one frond per 5 nibbles — fronds are hidden one at a time.
+export function makeFeastPlantFrondTexture(scene) {
+  const key = "feast-plant-frond";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0x2f9e5f, 1);
+  g.fillEllipse(8, 18, 10, 32);
+  g.fillStyle(0x3fae6a, 1);
+  g.fillEllipse(8, 18, 6, 26);
+  g.generateTexture(key, 16, 36);
+  g.destroy();
+  return key;
+}
+
 // Claws the crab — round orange body, two raised claws, stalk eyes.
 // Faces right, like the fish; setFlipX(true) turns him around.
 export function makeCrabTexture(scene) {
