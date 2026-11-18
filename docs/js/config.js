@@ -51,6 +51,12 @@ export const CONFIG = {
   plantNibbleRangePx: 50, // how close a fish must be to take a bite — measured to the plant's body, not its centre
   plantFrondEvery: 5,     // one frond lost per this many nibbles
   feedHoldIntervalSec: 0.1, // hold-to-feed: a pellet every 0.1s (~10/s, spam-click pace)
+  holdInitialDelaySec: 0.3, // hold-repeat: the first repeat fires only
+  // after 0.3s of continuous hold — a quick tap (~100-150ms) is exactly
+  // ONE action, never a click + a repeat. The delay is measured on the
+  // scene clock (real time), so it holds at 1x and at 4x alike; the
+  // 0.1s cadence after that is game time (dt), like everything else.
+  gameSpeeds: [1, 2, 3, 4], // pause-menu speed selector (see setSpeed)
   coralCost: 75,
   chestCost: 100,
   castleCost: 150,
@@ -232,9 +238,11 @@ export const HUE_TINTS = [0xfff2e0, 0xffffff, 0xe8f4ff];
 // buttons are 100x30, so labels stay readable.
 //   Row 1 (y 478): the 4 species + Turbo + Claws + Feeder-bot (cols 0-6)
 //     + Magnet, WIDE (spans cols 7-8, 206px).
-//   Row 2 (y 514): Food + Uncap + Decor + Tank + 2x Speed + Sell (cols 0-5).
+//   Row 2 (y 514): Food + Uncap + Decor + Tank + Pause + Sell (cols 0-5).
 // Sell is a DROP ZONE, not a purchase — the drag-to-sell check uses
-// SELL_BOUNDS, which is derived from this layout (row 2, col 5).
+// SELL_BOUNDS, which is derived from this layout (row 2, col 5). Pause
+// opens the pause menu (volume + game speed) — the old 2x shop toggle
+// is gone; the pause menu is the single source of truth for speed.
 export const SHOP = { cols: 9, slotW: 960 / 9, btnW: 100, btnH: 30, row1Y: 478, row2Y: 514 };
 export const SHOP_COL_X = (i) => SHOP.slotW * (i + 0.5);
 // Sell button bounds (shop grid, row 2 col 5): x 537..637, y 499..529.

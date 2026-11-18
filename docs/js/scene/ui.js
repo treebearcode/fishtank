@@ -17,14 +17,34 @@ export const uiMixin = {
   // string, so the bar stays right after a purchase changes the
   // button's state. The description goes in the FIXED bar (see
   // showDescText) — never an overlay over another button.
-  makeShopButton(x, y, w, h, label, onBuy, icon, tipFn) {
+  makeShopButton(x, y, w, h, label, onBuy, icon, tipFn, opts) {
     const btn = this.add.container(x, y);
     const bg = this.add.rectangle(0, 0, w, h, 0xffd23f, 1).setInteractive({ useHandCursor: true });
     bg.setStrokeStyle(2, 0x8a6a1f);
     const iconText = this.add.text(-w / 2 + 6, 0, icon || "", { fontSize: "14px" }).setOrigin(0, 0.5);
     const text = this.add.text(10, 0, label, { fontSize: "12px", color: "#12394d", fontStyle: "bold", align: "center" }).setOrigin(0.5, 0.5);
     btn.add([bg, iconText, text]);
-    bg.on("pointerdown", () => { if (this.started && !this.paused) { this.resetDescText(); onBuy(); } });
+    // opts.holdRepeat (fish species buttons only): the press buys once
+    // immediately, and holding past the 0.3s initial delay repeats the
+    // purchase every 0.1s (the shared hold mechanism — see armHold in
+    // scene/feeding.js). A repeat that fails (broke / at the cap)
+    // cancels the hold, so holding a greyed-out button does nothing
+    // past the one denied press. Release anywhere cancels the hold
+    // (the scene-level onPointerUp cancels it too — belt and braces).
+    bg.on("pointerdown", () => {
+      if (this.started && !this.paused) {
+        this.resetDescText();
+        if (opts && opts.holdRepeat) {
+          if (onBuy()) this.armHold(() => onBuy());
+        } else {
+          onBuy();
+        }
+      }
+    });
+    if (opts && opts.holdRepeat) {
+      bg.on("pointerup", () => this.cancelHold());
+      bg.on("pointerupoutside", () => this.cancelHold());
+    }
     if (tipFn) {
       bg.on("pointerover", () => { if (this.started && !this.paused) this.showDescText(tipFn()); });
       bg.on("pointerout", () => this.resetDescText());
@@ -82,7 +102,10 @@ export const uiMixin = {
       this.crab ? "Claws ✓" : "Claws");
     this.setButtonEnabled(this.tankBtn, !this.tankUpgraded && this.money >= CONFIG.tankUpgradeCost,
       this.tankUpgraded ? "Tank ✓" : "Tank");
-    this.setButtonEnabled(this.speedBtn, true, this.speedMult === 2 ? "2x: ON" : "2x Speed");
+    // Pause opens the pause menu (volume + game speed) — the old 2x
+    // shop toggle is gone; the menu is the single source of truth
+    // for speed (see setSpeed in scene/pause.js).
+    this.setButtonEnabled(this.pauseBtn, true, "Pause");
     // Feeder — buy once, then the same button toggles it ON/OFF. It is
     // always clickable when owned (toggling is free); before that it is
     // only clickable when you can afford it.
@@ -167,7 +190,6 @@ export const uiMixin = {
   showGoalPopup() {
     this.goalPopupShown = true;
     this.paused = true;
-    this.pausedText.setVisible(false);
     this.goalPopup.setVisible(true);
     sfx.buy();
   },
@@ -232,6 +254,7 @@ export const uiMixin = {
     this._dragOverSell = false;
     this.feedHold = false;
     this.feedHoldTimer = 0;
+    this.feedHoldAction = null;
     this._chomperToastShown = false;
     // Random events: destroy any visitor and re-arm the event clock
     // (clearEvents also resets the description bar, which may be

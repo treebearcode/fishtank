@@ -420,44 +420,169 @@ export function makeDeluxePelletTexture(scene) {
   return key;
 }
 
-// Feast Plant frond — one leaf blade, reused for all six fronds of a
-// plant (rotated/scaled per frond in spawnFeastPlant). The blade is
-// its own texture, not baked into one plant image, because a plant
-// loses one frond per 5 nibbles — fronds are hidden one at a time.
-export function makeFeastPlantFrondTexture(scene) {
-  const key = "feast-plant-frond";
+// Feast Plant fronds — THREE variants, each drawn AT display size
+// (48x108) with real detail, not one small blade scaled 3x (that is
+// what made the big plant look stretched and weird). The variants
+// are dealt round-robin to the six fronds of a plant, so no two
+// neighbouring fronds are identical:
+//   a — long curved blade, tapered, centre vein + side veins;
+//   b — broad oval leaf, lighter rim, veins fanning from the centre;
+//   c — narrow serrated blade, zigzag edges, centre vein.
+// All three pivot at the base (origin 0.5, 1 in spawnFeastPlant) and
+// share the same 48x108 extent, so the plant's geometry math is
+// unchanged.
+function drawFrondVeins(g, color, tipX, tipY) {
+  // Centre vein, base (24, 108) to the tip, plus four short side
+  // veins angling off it — thin quads, so they read at any scale.
+  g.fillStyle(color, 1);
+  g.fillPoints([
+    { x: 23, y: 106 }, { x: 25, y: 106 },
+    { x: tipX + 1, y: tipY + 4 }, { x: tipX - 1, y: tipY + 4 },
+  ]);
+  for (const [y, len] of [[84, 10], [62, 12], [40, 11], [22, 8]]) {
+    g.fillPoints([
+      { x: 24, y }, { x: 24, y: y + 2 },
+      { x: 24 - len, y: y + 8 }, { x: 24 - len, y: y + 10 },
+    ]);
+    g.fillPoints([
+      { x: 24, y }, { x: 24, y: y + 2 },
+      { x: 24 + len, y: y + 8 }, { x: 24 + len, y: y + 10 },
+    ]);
+  }
+}
+
+export function makeFeastPlantFrondTexture(scene, variant) {
+  const key = "feast-plant-frond-" + variant;
   if (scene.textures.exists(key)) return key;
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  if (variant === "a") {
+    // Long curved blade — tapered, leaning slightly right.
+    g.fillStyle(0x2f9e5f, 1);
+    g.fillPoints([
+      { x: 24, y: 108 }, { x: 14, y: 84 }, { x: 10, y: 52 },
+      { x: 16, y: 22 }, { x: 26, y: 2 }, { x: 32, y: 24 },
+      { x: 38, y: 56 }, { x: 34, y: 86 },
+    ]);
+    g.fillStyle(0x3fae6a, 1);
+    g.fillPoints([
+      { x: 24, y: 106 }, { x: 17, y: 82 }, { x: 14, y: 54 },
+      { x: 19, y: 26 }, { x: 26, y: 6 }, { x: 29, y: 26 },
+      { x: 34, y: 56 }, { x: 31, y: 84 },
+    ]);
+    drawFrondVeins(g, 0x1e6b3f, 26, 4);
+    // Light edge along the curve's lit side.
+    g.fillStyle(0x7fd4a0, 0.8);
+    g.fillPoints([
+      { x: 30, y: 30 }, { x: 33, y: 32 }, { x: 36, y: 58 },
+      { x: 33, y: 84 }, { x: 30, y: 82 }, { x: 33, y: 56 },
+    ]);
+  } else if (variant === "b") {
+    // Broad oval leaf — dark rim, lighter heart, veins fanning out.
+    g.fillStyle(0x2f9e5f, 1);
+    g.fillEllipse(24, 54, 44, 100);
+    g.fillStyle(0x46b573, 1);
+    g.fillEllipse(24, 54, 34, 88);
+    g.fillStyle(0x2f9e5f, 1);
+    g.fillEllipse(24, 58, 26, 76);
+    drawFrondVeins(g, 0x1e6b3f, 24, 10);
+    g.fillStyle(0x7fd4a0, 0.7);
+    g.fillEllipse(20, 40, 10, 30);
+  } else {
+    // Narrow serrated blade — zigzag edges, centre vein.
+    g.fillStyle(0x2f9e5f, 1);
+    g.fillPoints([
+      { x: 24, y: 108 }, { x: 16, y: 96 }, { x: 20, y: 86 },
+      { x: 13, y: 74 }, { x: 18, y: 64 }, { x: 12, y: 50 },
+      { x: 18, y: 40 }, { x: 14, y: 26 }, { x: 22, y: 14 },
+      { x: 26, y: 2 }, { x: 30, y: 14 }, { x: 34, y: 26 },
+      { x: 30, y: 40 }, { x: 36, y: 50 }, { x: 30, y: 64 },
+      { x: 35, y: 74 }, { x: 28, y: 86 }, { x: 32, y: 96 },
+    ]);
+    g.fillStyle(0x3fae6a, 1);
+    g.fillPoints([
+      { x: 24, y: 106 }, { x: 19, y: 94 }, { x: 21, y: 84 },
+      { x: 17, y: 72 }, { x: 20, y: 62 }, { x: 17, y: 50 },
+      { x: 20, y: 40 }, { x: 18, y: 28 }, { x: 23, y: 16 },
+      { x: 26, y: 6 }, { x: 29, y: 16 }, { x: 30, y: 28 },
+      { x: 27, y: 40 }, { x: 31, y: 50 }, { x: 27, y: 62 },
+      { x: 31, y: 72 }, { x: 27, y: 84 }, { x: 29, y: 94 },
+    ]);
+    drawFrondVeins(g, 0x1e6b3f, 26, 6);
+  }
+  g.generateTexture(key, 48, 108);
+  g.destroy();
+  return key;
+}
+
+// Feast Plant stem — drawn AT display size (24x72), not a flat
+// rectangle: segment rings, a lighter centre stripe, and root
+// tendrils flaring at the base. It sits at the same place and size
+// as the old rectangle (centred on (0, 12) in the plant container).
+export function makeFeastPlantStemTexture(scene) {
+  const key = "feast-plant-stem";
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Main stem with a vertical gradient (darker at the top).
+  g.fillGradientStyle(0x2a7a45, 0x2a7a45, 0x3fae6a, 0x3fae6a, 1);
+  g.fillRect(4, 0, 16, 72);
+  // Lighter centre stripe.
+  g.fillStyle(0x6fc48d, 1);
+  g.fillRect(10, 2, 4, 68);
+  // Segment rings — the joints where fronds attach.
+  g.fillStyle(0x1e6b3f, 1);
+  for (const y of [14, 30, 46, 60]) g.fillRect(4, y, 16, 2);
+  // Root tendrils flaring at the base.
   g.fillStyle(0x2f9e5f, 1);
-  g.fillEllipse(8, 18, 10, 32);
-  g.fillStyle(0x3fae6a, 1);
-  g.fillEllipse(8, 18, 6, 26);
-  g.generateTexture(key, 16, 36);
+  g.fillTriangle(6, 66, 0, 72, 10, 72);
+  g.fillTriangle(12, 68, 10, 72, 15, 72);
+  g.fillTriangle(18, 66, 14, 72, 24, 72);
+  g.generateTexture(key, 24, 72);
   g.destroy();
   return key;
 }
 
 // Feast Plant skeleton — what is left when the fish strip a plant
-// to the bone: a bare pale stem with a few stub branches, no leaves.
-// Drawn at the plant's full rendered height (152px: it spans the
-// same -104..+48 local extent as the fronds and stem), shown only
-// for the final 5 nibbles (see updatePlantFronds).
+// to the bone. Drawn AT display size (24x152) in detail: a gnarled,
+// wavy pale stem (not a straight triangle), knots where fronds were
+// bitten off, stubs of varied length and angle, and a forked tip.
+// Shown only for the final 5 nibbles (see updatePlantFronds).
 export function makeFeastPlantSkeletonTexture(scene) {
   const key = "feast-plant-skeleton";
   if (scene.textures.exists(key)) return key;
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
-  // Bare stem: pale bone, slightly tapered — wide at the base.
+  // Gnarled stem — a wavy tapered polygon, wide at the base.
   g.fillStyle(0xd8cba6, 1);
-  g.fillTriangle(6, 152, 14, 152, 10, 0);
-  // Stub branches where the fronds were bitten off — short nubs
-  // alternating sides.
+  g.fillPoints([
+    { x: 9, y: 152 }, { x: 6, y: 122 }, { x: 10, y: 92 },
+    { x: 5, y: 62 }, { x: 9, y: 32 }, { x: 11, y: 8 },
+    { x: 13, y: 2 }, { x: 15, y: 8 }, { x: 14, y: 32 },
+    { x: 18, y: 62 }, { x: 13, y: 92 }, { x: 17, y: 122 },
+    { x: 15, y: 152 },
+  ]);
+  // Lighter edge along the stem's lit side.
+  g.fillStyle(0xe8dcc0, 1);
+  g.fillPoints([
+    { x: 13, y: 150 }, { x: 15, y: 122 }, { x: 12, y: 92 },
+    { x: 16, y: 62 }, { x: 13, y: 32 }, { x: 14, y: 10 },
+    { x: 15, y: 32 }, { x: 17, y: 62 }, { x: 14, y: 92 },
+    { x: 16, y: 122 }, { x: 14, y: 150 },
+  ]);
+  // Knots where fronds were bitten off.
   g.fillStyle(0xbfae85, 1);
-  g.fillRect(3, 28, 8, 3);
-  g.fillRect(11, 52, 8, 3);
-  g.fillRect(2, 78, 8, 3);
-  g.fillRect(11, 102, 8, 3);
-  g.fillRect(3, 126, 8, 3);
-  g.generateTexture(key, 20, 152);
+  g.fillCircle(8, 122, 2.5); g.fillCircle(15, 92, 2.5); g.fillCircle(8, 62, 2.5);
+  // Stub branches — varied lengths and angles, alternating sides.
+  g.fillStyle(0xc9b992, 1);
+  g.fillRect(2, 26, 8, 3);
+  g.fillRect(14, 50, 10, 3);
+  g.fillRect(1, 76, 7, 3);
+  g.fillRect(14, 100, 9, 3);
+  g.fillRect(2, 124, 8, 3);
+  g.fillRect(13, 140, 6, 3);
+  // Forked tip.
+  g.fillStyle(0xd8cba6, 1);
+  g.fillTriangle(11, 8, 7, 0, 12, 0);
+  g.fillTriangle(13, 8, 13, 0, 17, 0);
+  g.generateTexture(key, 24, 152);
   g.destroy();
   return key;
 }

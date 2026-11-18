@@ -30,7 +30,9 @@ deploys this repo's `docs/` folder.)
 - **Feeding:** one "Food" button opens a panel with three food types —
   Standard $2 = 1 feed, Deluxe $5 = 2 feeds, Feast Plant $40 = 30 nibbles
   shared by the whole tank. The plant is big (~150px tall, dwarfing a
-  fish), drops from the cursor, sinks slowly, anchors on the floor until
+  fish), drawn in detail at that size (three frond variants with veins,
+  a textured stem with roots, a gnarled skeleton for the final nibbles),
+  drops from the cursor, sinks slowly, anchors on the floor until
   fully eaten, and loses a frond every 5 nibbles — the last few leave a
   bare skeleton. No cap on how many plants at once. Fish chase the
   fight over food. A 0.5s eat cooldown is the only anti-hogging for pellets
@@ -97,10 +99,16 @@ deploys this repo's `docs/` folder.)
   paid in cents.
 - **Tank upgrade** $200: fish cap 16 → 28. **Uncap Fish** toggle (free,
   playtest only, resets on reload): removes the cap entirely while ON.
-  **2x Speed** toggle (free): speeds everything, hunger included.
+- **Pause menu (P or the Pause button):** Volume slider (0–100%, master
+  volume for all sounds, session-only) and a game-speed selector
+  1x/2x/3x/4x — the menu is the only speed control (the old 2x shop
+  toggle is gone). Speed scales everything, hunger included.
 - **Input:** click water = drop food, click coin = collect (UI > coins >
   fish > water priority, one dispatcher), tap fish = poke, drag fish =
   move it, drag onto Sell = sell it (prices depend on species and size).
+  Hold water = keep dropping food; hold a fish species button = keep
+  buying that fish — both at the same 0.1s cadence, after a 0.3s
+  initial delay so a quick tap is exactly one action.
 - **Goal:** bank $1,000 total and own 3 large fish → "Goal met!" popup
   with Restart / Continue. No save yet — closing the page resets the run.
 
@@ -173,7 +181,7 @@ deploys this repo's `docs/` folder.)
   - Row 2: Food selector (Standard $2 / Deluxe $5), Decor **panel**
     (Coral $75, Treasure Chest $100, Castle $150 — one of each, +5% coin
     value each, paid in cents), Tank Upgrade **$200** (cap 16 → 28,
-    once), **2x Speed** toggle (free), Sell (drag a fish onto it).
+    once), Pause button (opens the menu: volume + speed 1x–4x), Sell (drag a fish onto it).
   - Turbo crawls the floor and collects landed coins — he crawls
     toward a coin's landing spot while it's still sinking, so he's
     usually already there when it lands. Claws grabs sinking

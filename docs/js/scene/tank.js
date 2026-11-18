@@ -17,7 +17,7 @@ import { goalIsMet, countLargeFish } from "../economy.js";
 import { sfx } from "../sound.js";
 import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
-  makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeFeastPlantSkeletonTexture, makeCrabTexture, makeFeederBotTexture,
+  makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeFeastPlantStemTexture, makeFeastPlantSkeletonTexture, makeCrabTexture, makeFeederBotTexture,
   makeBotLightTexture, makeEggTexture, makeTreasureChestTexture, makeHatTexture,
   makeJellyfishTexture, makeJellyBurstTexture,
 } from "../textures.js";
@@ -31,6 +31,7 @@ import { feedingMixin } from "./feeding.js";
 import { coinsMixin } from "./coins.js";
 import { lifecycleMixin } from "./lifecycle.js";
 import { inputMixin } from "./input.js";
+import { pauseMixin } from "./pause.js";
 
 export class TankScene extends Phaser.Scene {
   constructor() {
@@ -57,7 +58,7 @@ export class TankScene extends Phaser.Scene {
     this.decorSprites = {};      // coral/chest/castle Graphics, hidden until bought
     this.tankUpgraded = false;   // fish cap 16 -> 28
     this.uncapFish = false;      // playtest toggle: the fish cap is ignored while ON (resets on reload / resetTank)
-    this.speedMult = 1;          // 1 or 2 (2x toggle)
+    this.speedMult = 1;          // game speed 1-4 (pause menu — the single source of truth)
     this.goalComplete = false;
     this.goalPopupShown = false;
     this.goalPopup = null;
@@ -75,11 +76,17 @@ export class TankScene extends Phaser.Scene {
     this.pointerX = 480;
     this.pointerY = 200;
     this.pointerSeen = false;
-    // HOLD-TO-FEED: while the pointer is held down over open water,
-    // dropFood fires on a fixed cadence (see updateFeedHold). Set by
-    // onPointerDown's water branch, cleared by onPointerUp.
+    // HOLD-REPEAT (shared — food hold-drop and fish spam-buy): while
+    // a hold is armed, updateHold() repeats the action on a cadence
+    // after a 0.3s initial delay (see armHold in scene/feeding.js).
+    // feedHold/feedHoldTimer are the armed state (the old feed-hold
+    // fields, kept — the tests read them); feedHoldAction is what
+    // repeats, feedHoldStartMs is when it was armed (scene clock, so
+    // the initial delay is real time at any game speed).
     this.feedHold = false;
     this.feedHoldTimer = 0;
+    this.feedHoldAction = null;
+    this.feedHoldStartMs = 0;
     this.feederBot = null;       // { sprite, light, targetX, targetY, wanderTimer } once bought
     // BREEDING state. breedingPairs: [{ a, b, heartsSec, hearts: [text, text] }]
     // while a pair swims together; eggs: [{ sprite, species, waitSec }]
@@ -177,8 +184,11 @@ export class TankScene extends Phaser.Scene {
     makeCrabTexture(this);
     makePelletTexture(this);
     makeDeluxePelletTexture(this);
-    makeFeastPlantFrondTexture(this); // one leaf blade, reused per frond
-    makeFeastPlantSkeletonTexture(this); // the bare stem a plant is stripped to
+    makeFeastPlantFrondTexture(this, "a"); // three frond variants, dealt round-robin
+    makeFeastPlantFrondTexture(this, "b");
+    makeFeastPlantFrondTexture(this, "c");
+    makeFeastPlantStemTexture(this); // detailed stem with rings + roots
+    makeFeastPlantSkeletonTexture(this); // the gnarled bare stem a plant is stripped to
     makeFeederBotTexture(this);
     makeBotLightTexture(this);
     makeEggTexture(this);
@@ -225,7 +235,6 @@ export class TankScene extends Phaser.Scene {
     this.goalText = this.add.text(360, 10, "", { fontSize: "14px", color: "#ffe27a" });
     this.toastText = this.add.text(480, 60, "", { fontSize: "18px", color: "#ffffff", fontStyle: "bold", backgroundColor: "#0b2a3acc", padding: { x: 10, y: 6 } }).setOrigin(0.5, 0).setVisible(false).setDepth(10);
     this.emptyText = this.add.text(480, 200, "Tank is empty!\nBuy a guppy below to keep going.", { fontSize: "24px", color: "#ffffff", align: "center", backgroundColor: "#0b2a3acc", padding: { x: 16, y: 12 } }).setOrigin(0.5, 0).setVisible(false).setDepth(10);
-    this.pausedText = this.add.text(480, 200, "Paused — press P to resume", { fontSize: "26px", color: "#ffffff", backgroundColor: "#0b2a3acc", padding: { x: 16, y: 12 } }).setOrigin(0.5, 0).setVisible(false).setDepth(10);
 
     // --- Shop bar (bottom, y 460..540): a 9-column grid, two rows of
     //     compact buttons (100x30, Magnet wide at 206px spanning cols
@@ -234,23 +243,25 @@ export class TankScene extends Phaser.Scene {
     //     text (what it does, price, current state) lives in the FIXED
     //     description bar just above the buttons.
     //     Row 1: the 4 species + Turbo + Claws + Feeder + Magnet.
-    //     Row 2: Food + Uncap + Decor + Tank + 2x Speed + Sell.
+    //     Row 2: Food + Uncap + Decor + Tank + Pause + Sell.
     //     Sell is a DROP ZONE, not a purchase — clicking it alone does
     //     nothing; drag a fish onto it to sell. Decor opens a panel
     //     above the shop (see toggleDecorPanel) instead of buying
-    //     directly.
+    //     directly. Pause opens the pause menu (see scene/pause.js).
     this.add.rectangle(0, CONFIG.waterBottom, CONFIG.width, CONFIG.height - CONFIG.waterBottom, 0x12394d, 1).setOrigin(0, 0);
     const col = (i) => SHOP_COL_X(i);
     const R1 = SHOP.row1Y, R2 = SHOP.row2Y, BW = SHOP.btnW, BH = SHOP.btnH;
-    // Row 1 (y = 478): species + helpers + automation.
+    // Row 1 (y = 478): species + helpers + automation. The species
+    // buttons spam-buy on hold (see makeShopButton's holdRepeat) —
+    // hold one down and it keeps buying at the food cadence.
     this.guppyBtn = this.makeShopButton(col(0), R1, BW, BH, "Guppy", () => this.buyFish("guppy"), "🐟",
-      () => "Guppy — $100. Coins $1/$5/$10 every ~8s. Grows at 3/6 feeds.");
+      () => "Guppy — $100. Coins $1/$5/$10 every ~8s. Grows at 3/6 feeds.", { holdRepeat: true });
     this.emberfinBtn = this.makeShopButton(col(1), R1, BW, BH, "Emberfin", () => this.buyFish("emberfin"), "🔥",
-      () => "Emberfin — $250. Fast fiery fish, coins $1/$5/$9 every ~6s.");
+      () => "Emberfin — $250. Fast fiery fish, coins $1/$5/$9 every ~6s.", { holdRepeat: true });
     this.chomperBtn = this.makeShopButton(col(2), R1, BW, BH, "Chomper", () => this.buyFish("chomper"), "🟣",
-      () => "Chomper — $400. Slow, grows at 4/8 feeds, big coins $3/$10/$20.");
+      () => "Chomper — $400. Slow, grows at 4/8 feeds, big coins $3/$10/$20.", { holdRepeat: true });
     this.starfishBtn = this.makeShopButton(col(3), R1, BW, BH, "Starfish", () => this.buyFish("starfish"), "⭐",
-      () => "Starfish — $300. Slow, swims low, coins $2/$6/$12 every ~12s.");
+      () => "Starfish — $300. Slow, swims low, coins $2/$6/$12 every ~12s.", { holdRepeat: true });
     this.snailBtn = this.makeShopButton(col(4), R1, BW, BH, "Turbo", () => this.buyTurboOrSpeed(), "🐌",
       () => !this.snail ? "Turbo the snail — $200. Crawls the floor collecting landed coins."
         : !this.snailUpgraded ? "Turbo Speed — $150. Turbo crawls 60 → 90 px/s."
@@ -266,7 +277,7 @@ export class TankScene extends Phaser.Scene {
     // "Magnet L1 · $400".
     this.magnetBtn = this.makeShopButton(SHOP.slotW * 8, R1, BW * 2 + 6, BH, "Magnet $250", () => this.buyMagnet(), "🧲",
       () => this.magnetTip());
-    // Row 2 (y = 514): food selector + uncap toggle + decor + tank + speed + sell.
+    // Row 2 (y = 514): food selector + uncap toggle + decor + tank + pause + sell.
     this.foodBtn = this.makeShopButton(col(0), R2, BW, BH, "Food: Std", () => this.toggleFoodPanel(), "🍤",
       () => this.foodTip());
     this.uncapBtn = this.makeShopButton(col(1), R2, BW, BH, "Uncap: OFF", () => this.toggleUncapFish(), "∞",
@@ -275,8 +286,8 @@ export class TankScene extends Phaser.Scene {
       () => this.decorTip());
     this.tankBtn = this.makeShopButton(col(3), R2, BW, BH, "Tank", () => this.buyTankUpgrade(), "🐠",
       () => this.tankUpgraded ? "Tank ✓ upgraded — cap 28 fish." : "Tank Upgrade — $200. Fish cap 16 → 28.");
-    this.speedBtn = this.makeShopButton(col(4), R2, BW, BH, "2x Speed", () => this.toggleSpeed(), "⚡",
-      () => this.speedMult === 2 ? "2x Speed: ON — everything runs twice as fast, hunger included." : "2x Speed: OFF — click for double speed (hunger ticks twice as fast too).");
+    this.pauseBtn = this.makeShopButton(col(4), R2, BW, BH, "Pause", () => this.togglePause(), "⏸",
+      () => "Pause — open settings (volume, game speed 1x-4x). P also pauses.");
     this.sellBtn = this.makeShopButton(col(5), R2, BW, BH, "Sell", () => this.toast("Drag a fish onto Sell to sell it — prices depend on species and size."), "💲",
       () => "Sell — drag a fish here to sell it. Guppy $50/$100/$150, Emberfin $125/$200/$300, Chomper $200/$350/$500, Starfish $150/$250/$350.");
 
@@ -304,16 +315,14 @@ export class TankScene extends Phaser.Scene {
     // still be released — otherwise it would stay grabbed forever.
     this.input.on("pointerupoutside", (pointer) => this.onPointerUp(pointer));
 
-    // --- P = pause. Not while the goal popup is open — the popup has
-    //     its own buttons, and unpausing behind it would let the game
-    //     run while the player is still deciding.
-    this.input.keyboard.on("keydown-P", () => {
-      if (!this.started) return;
-      if (this.goalPopupShown && !this.goalComplete) return;
-      this.paused = !this.paused;
-      this.pausedText.setVisible(this.paused);
-      if (this.paused) this.resetDescText();
-    });
+    // --- P = pause (opens the pause menu with volume + speed
+    //     settings — see scene/pause.js). Not while the goal popup is
+    //     open — the popup has its own buttons, and unpausing behind
+    //     it would let the game run while the player is still deciding.
+    this.input.keyboard.on("keydown-P", () => this.togglePause());
+
+    // --- Pause menu: built once here, shown/hidden by togglePause().
+    this.buildPauseMenu();
 
     // --- Start overlay: the game only runs after the player clicks
     //     Start, so the hunger timers don't tick away while they're
@@ -368,12 +377,13 @@ export class TankScene extends Phaser.Scene {
   // --- The game loop ---------------------------------------------------------
   update(time, delta) {
     if (!this.started || this.paused) return;
-    // 2x speed multiplies every dt-based timer in this loop — hunger,
-    // coins, fish movement, snail/crab — so it is not a free win.
+    // Game speed multiplies every dt-based timer in this loop —
+    // hunger, coins, fish movement, snail/crab — so it is not a free
+    // win. speedMult is 1-4 from the pause menu (see setSpeed).
     const dt = (delta / 1000) * this.speedMult; // seconds this frame
 
     this.updateBubbles(dt, time);
-    this.updateFeedHold(dt);
+    this.updateHold(dt);
     this.updateFeederDrop(dt);
     this.updatePellets(dt);
     this.updateFeastPlants(dt, time);
@@ -414,4 +424,5 @@ Object.assign(TankScene.prototype,
   coinsMixin,
   lifecycleMixin,
   inputMixin,
+  pauseMixin,
 );

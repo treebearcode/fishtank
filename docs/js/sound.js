@@ -4,6 +4,9 @@
 // wrapped in try/catch — sound is cosmetic, it must never crash the game.
 
 let _audioCtx = null;
+let _masterVolume = 1; // pause-menu volume slider, 0-1. Session-only:
+// it lives in this module, so it resets on page reload and is never
+// saved anywhere (no localStorage, by design).
 function beep(freq, durationMs, type, volume) {
   try {
     if (!_audioCtx) {
@@ -16,7 +19,7 @@ function beep(freq, durationMs, type, volume) {
     const gain = _audioCtx.createGain();
     osc.type = type || "sine";
     osc.frequency.value = freq;
-    gain.gain.value = volume || 0.08;
+    gain.gain.value = (volume || 0.08) * _masterVolume;
     osc.connect(gain);
     gain.connect(_audioCtx.destination);
     osc.start();
@@ -25,6 +28,9 @@ function beep(freq, durationMs, type, volume) {
 }
 
 export const sfx = {
+  // Master volume (0-1), set by the pause-menu slider. 0 is silent.
+  setVolume: function (v) { _masterVolume = Math.max(0, Math.min(1, v)); },
+  getVolume: function () { return _masterVolume; },
   eat: function () { beep(620, 70, "sine", 0.07); },
   coin: function () { beep(880, 70, "sine", 0.08); setTimeout(function () { beep(1320, 90, "sine", 0.06); }, 60); },
   buy: function () { beep(440, 90, "triangle", 0.08); setTimeout(function () { beep(660, 110, "triangle", 0.07); }, 80); },

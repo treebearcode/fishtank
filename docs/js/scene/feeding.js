@@ -34,7 +34,7 @@ export const feedingMixin = {
   // FEAST PLANT: $40 for 30 nibbles, dropped from the cursor like any
   // food. NO cap on how many can be out at once — hold-to-feed drops
   // one every 0.1s at $40 each, so the only limit is the money. A
-  // failed drop (broke) cancels the hold (see updateFeedHold). No
+  // failed drop (broke) cancels the hold (see updateHold). No
   // Tank Upgrade gate: the $40 cost IS the gate.
   dropPlant(x, y) {
     if (this.money < CONFIG.plantCost) {
@@ -58,27 +58,31 @@ export const feedingMixin = {
   // the plant's centre (for steering); the base sits 48px below it,
   // so the plant anchors with its base on the floor (floorY - 42).
   // Fronds are hidden one per 5 nibbles and the last few leave only
-  // the skeleton (see updatePlantFronds).
+  // the skeleton (see updatePlantFronds). The fronds are three
+  // variants drawn AT display size (48x108) — dealt round-robin, so
+  // neighbouring fronds differ — and the stem is its own detailed
+  // texture; nothing here is a small texture scaled up.
   spawnFeastPlant(x, y) {
     const S = CONFIG.plantScale;
-    // Tallest frond: a 36px blade × 3 × 1.15 Y-scale at 10° reaches
+    // Tallest frond: a 108px blade × 1.15 Y-scale at 10° reaches
     // ~122px above its pivot (+18) — the plant's top is ~104px above
     // its centre, its base 48px below: ~152px tall in all.
-    const topOffset = Math.round(6 * S - 36 * S * 1.15 * Math.cos(10 * Math.PI / 180));
+    const topOffset = Math.round(6 * S - 108 * 1.15 * Math.cos(10 * Math.PI / 180));
     const baseOffset = 16 * S;
     const px = Phaser.Math.Clamp(x, 20, CONFIG.width - 20);
     // Keep the whole plant on screen when dropped: the top must not
     // start above the water.
     const py = Phaser.Math.Clamp(y, 44 - topOffset, CONFIG.waterBottom - 30);
     const container = this.add.container(px, py).setDepth(3);
-    const stem = this.add.rectangle(0, 4 * S, 5 * S, 24 * S, 0x2f7a3d);
+    const stem = this.add.image(0, 4 * S, "feast-plant-stem");
     container.add(stem);
     const fronds = [];
     const angles = [-50, -30, -10, 10, 30, 50];
+    const variants = ["a", "b", "c"];
     angles.forEach((deg, i) => {
-      const f = this.add.image(0, 6 * S, "feast-plant-frond").setOrigin(0.5, 1);
+      const f = this.add.image(0, 6 * S, "feast-plant-frond-" + variants[i % 3]).setOrigin(0.5, 1);
       f.rotation = deg * Math.PI / 180; // pivot at the base, fan outward
-      f.setScale(S, S * (0.85 + (i % 3) * 0.15));
+      f.setScale(1, 0.85 + (i % 3) * 0.15); // texture is already display size — only the Y variation scales
       container.add(f);
       fronds.push(f);
     });
@@ -198,23 +202,46 @@ export const feedingMixin = {
     return true;
   },
 
-  // HOLD-TO-FEED: while the pointer is held down over open water,
-  // drop a pellet on a fixed cadence — like spam clicking without the
-  // RSI. The cadence runs on dt, so pausing (update() early-returns)
-  // and 2x speed both apply. The hold pauses while the pointer is
-  // over the shop or the top bar, and cancels when the money runs
-  // out (a failed drop must not toast every frame). Cleared by
-  // onPointerUp, which fires for pointerup and pointerupoutside.
-  updateFeedHold(dt) {
-    if (!this.feedHold) return;
+  // HOLD-REPEAT (shared — food hold-drop AND fish spam-buy use this
+  // one mechanism, never a second timer). armHold() arms repeats
+  // AFTER the caller already did the first action once (a click drops
+  // one pellet / buys one fish; the hold only ADDS repeats). The first
+  // repeat fires only after holdInitialDelaySec (0.3s) of continuous
+  // hold, measured on the scene clock (REAL time) — a quick tap
+  // (~100-150ms) is exactly ONE action, which is what the double-drop
+  // bug was: the old 0.1s cadence started immediately, so a normal
+  // click dropped TWO $40 plants. After the delay, repeats run every
+  // feedHoldIntervalSec (0.1s) on dt, so 2x/3x/4x speed still scales
+  // the cadence like everything else. The action returns true when it
+  // did something (reset the cadence), false when it failed (broke /
+  // at the cap — the hold cancels, one toast, no spam), or "skip"
+  // when it should retry next frame without resetting (the food hold
+  // over the shop / top bar: paused, not cancelled).
+  armHold(action) {
+    this.feedHold = true;
+    this.feedHoldAction = action;
+    this.feedHoldStartMs = this.time.now;
+    this.feedHoldTimer = 0;
+  },
+
+  cancelHold() {
+    this.feedHold = false;
+    this.feedHoldTimer = 0;
+    this.feedHoldAction = null;
+  },
+
+  // Ticks the armed hold once per frame (called from update()).
+  // Pausing stops the ticks (update() early-returns), so the hold
+  // survives a pause untouched and resumes on unpause.
+  updateHold(dt) {
+    if (!this.feedHold || !this.feedHoldAction) return;
+    if (this.time.now - this.feedHoldStartMs < CONFIG.holdInitialDelaySec * 1000) return;
     this.feedHoldTimer -= dt;
     if (this.feedHoldTimer > 0) return;
-    if (!this.pointerSeen || this.pointerY < 36 || this.pointerY >= CONFIG.waterBottom) {
-      // Pointer over the top bar / shop bar: hold pauses, does not cancel.
-      return;
-    }
+    const r = this.feedHoldAction();
+    if (r === false) { this.cancelHold(); return; }
+    if (r === "skip") return; // timer stays spent — retry next frame
     this.feedHoldTimer = CONFIG.feedHoldIntervalSec;
-    if (!this.dropFood(this.pointerX, this.pointerY)) this.feedHold = false;
   },
 
   // A fish eats a pellet: reset hunger, count the feed(s), maybe grow.

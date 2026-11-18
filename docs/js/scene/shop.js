@@ -1,6 +1,7 @@
 // scene/shop.js — TankScene mixin: everything the shop buttons DO.
 // Purchase handlers, the decor panel, the magnet label/tip, selling a
-// fish, the food selector, and the 2x speed toggle.
+// fish, the food selector, and the pause menu's speed setting (see
+// scene/pause.js — the old 2x shop toggle is gone).
 
 import { CONFIG, speciesDef, DECOR_PANEL, FOOD_PANEL } from "../config.js";
 import { moneyFmt, addMoney, decorCount, coinValueForStage, coinValueWithBonus, sellPriceForStage } from "../economy.js";
@@ -21,10 +22,12 @@ function foodDef(type) { return FOOD_TYPES.find((f) => f.key === type) || FOOD_T
 
 export const shopMixin = {
   // Buy any species. Same rules for all: enough money and room under
-  // the shared fish cap (all species count together).
+  // the shared fish cap (all species count together). Returns true on
+  // a successful buy, false when denied — the spam-buy hold-repeat
+  // (see makeShopButton) uses that to stop when broke / at the cap.
   buyFish(speciesKey) {
     const sp = speciesDef(speciesKey);
-    if (this.money < sp.cost || this.fish.length >= this.maxFishCap()) { sfx.denied(); return; }
+    if (this.money < sp.cost || this.fish.length >= this.maxFishCap()) { sfx.denied(); return false; }
     this.money -= sp.cost;
     const x = 480 + (Math.random() * 200 - 100);
     // Starfish prefer the bottom third from the moment they arrive.
@@ -34,6 +37,7 @@ export const shopMixin = {
     this.toast("Bought a " + sp.name + " for " + moneyFmt(sp.cost) + "!");
     this.updateShopUI();
     this.updateTopUI();
+    return true;
   },
 
   // The merged Turbo button handler. No Turbo yet -> buy him. Turbo
@@ -371,14 +375,5 @@ export const shopMixin = {
     this.updateShopUI();
     this.updateTopUI();
     this.updateGoalUI();
-  },
-
-  // 2x speed toggle — free, and it speeds EVERYTHING (update()
-  // multiplies dt by this.speedMult), hunger and coin timers included.
-  toggleSpeed() {
-    this.speedMult = this.speedMult === 2 ? 1 : 2;
-    sfx.pop();
-    this.toast(this.speedMult === 2 ? "2x speed ON — hunger ticks twice as fast too!" : "Back to normal speed.");
-    this.updateShopUI();
   },
 };

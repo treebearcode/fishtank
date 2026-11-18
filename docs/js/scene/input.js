@@ -89,13 +89,17 @@ export const inputMixin = {
       return;
     }
     // Empty water — the only branch that drops food. A successful
-    // drop starts the hold-to-feed cadence: keep dropping while the
-    // button stays down (see updateFeedHold in scene/feeding.js). A
-    // failed drop (broke) starts nothing, so "Not enough money"
-    // toasts once per click, not once per frame.
+    // drop arms the shared hold-repeat (see armHold in scene/feeding.js):
+    // keep holding and it keeps dropping at the food cadence, after
+    // the 0.3s initial delay. A failed drop (broke) arms nothing, so
+    // "Not enough money" toasts once per click, not once per frame.
+    // The repeat follows the pointer as it moves and pauses (does not
+    // cancel) while the pointer is over the shop or the top bar.
     if (this.dropFood(pointer.x, pointer.y)) {
-      this.feedHold = true;
-      this.feedHoldTimer = CONFIG.feedHoldIntervalSec;
+      this.armHold(() => {
+        if (!this.pointerSeen || this.pointerY < 36 || this.pointerY >= CONFIG.waterBottom) return "skip";
+        return this.dropFood(this.pointerX, this.pointerY);
+      });
     }
   },
 
@@ -154,9 +158,10 @@ export const inputMixin = {
   },
 
   onPointerUp(pointer) {
-    // Release ends hold-to-feed. This runs BEFORE the dragFish early
-    // return, so a plain water hold (no fish grabbed) still clears it.
-    this.feedHold = false;
+    // Release ends ANY hold-repeat (food hold-drop or fish spam-buy).
+    // This runs BEFORE the dragFish early return, so a plain water
+    // hold (no fish grabbed) still clears it.
+    this.cancelHold();
     if (!this.dragFish) return;
     const fish = this.dragFish;
     const movePx = Math.hypot(pointer.x - this.dragStartX, pointer.y - this.dragStartY);

@@ -725,7 +725,7 @@ test("scene: every shop button has an icon and a tooltip function", () => {
   const s = makeScene();
   const btns = [s.guppyBtn, s.emberfinBtn, s.chomperBtn, s.starfishBtn, s.snailBtn,
     s.crabBtn, s.feederBtn, s.magnetBtn, s.foodBtn, s.uncapBtn, s.decorBtn,
-    s.tankBtn, s.speedBtn, s.sellBtn];
+    s.tankBtn, s.pauseBtn, s.sellBtn];
   eq(btns.length, 14, "14 shop buttons: 8 row 1 (magnet wide) + 6 row 2");
   for (const b of btns) {
     assert(b.icon && b.icon.text && b.icon.text.length > 0, "button missing icon");
@@ -762,13 +762,113 @@ test("scene: description bar is fixed, shows hover text, resets on pointerout / 
   eq(s.descBarText.text, G.DESC_DEFAULT_TEXT, "bar resets on pause");
   assert(s.descBar.visible, "bar stays visible while paused");
 });
-test("scene: 2x speed toggle still works", () => {
+test("scene: pause menu speed selector sets 1x/2x/3x/4x (the old 2x shop toggle is gone)", () => {
   const s = makeScene();
   eq(s.speedMult, 1);
-  s.toggleSpeed();
-  eq(s.speedMult, 2);
-  s.toggleSpeed();
-  eq(s.speedMult, 1);
+  assert(typeof s.toggleSpeed !== "function", "toggleSpeed is gone — the pause menu is the only speed control");
+  assert(s.speedBtn === undefined, "no 2x toggle button in the shop bar");
+  assert(s.pauseBtn !== undefined, "Pause button takes its place in row 2");
+  for (const m of [2, 3, 4, 1]) {
+    s.setSpeed(m);
+    eq(s.speedMult, m, "setSpeed(" + m + ")");
+  }
+  s.setSpeed(99);
+  eq(s.speedMult, 1, "an invalid speed is ignored");
+});
+
+// ===========================================================================
+// PAUSE MENU SETTINGS: P (or the Pause button) opens an overlay with a
+// Volume slider (0-100%, master volume for all sfx) and a 1x/2x/3x/4x
+// speed selector. The menu is the single source of truth for speed.
+// ===========================================================================
+test("pause: P opens the menu, P again (or Resume) closes it", () => {
+  const s = makeScene();
+  assert(s.pauseMenu !== undefined, "menu built at create()");
+  eq(s.pauseMenu.visible, false, "menu hidden while playing");
+  s._stubs.keyboardHandlers["keydown-P"]();
+  eq(s.paused, true, "P pauses");
+  eq(s.pauseMenu.visible, true, "menu shown while paused");
+  s._stubs.keyboardHandlers["keydown-P"]();
+  eq(s.paused, false, "P again unpauses");
+  eq(s.pauseMenu.visible, false, "menu hidden again");
+  // The Pause button opens it too, and Resume closes it.
+  s.pauseBtn.bg._handlers["pointerdown"]();
+  eq(s.paused, true, "Pause button pauses");
+  eq(s.pauseMenu.visible, true, "menu shown");
+  s.pauseMenu.resumeRect._handlers["pointerdown"]();
+  eq(s.paused, false, "Resume unpauses");
+  eq(s.pauseMenu.visible, false, "menu hidden");
+});
+
+test("pause: P does nothing before Start or while the goal popup is open", () => {
+  const t = makeTitleScene();
+  t._stubs.keyboardHandlers["keydown-P"]();
+  eq(t.paused, false, "no pause on the title screen");
+  const s = makeScene();
+  s.showGoalPopup();
+  s._stubs.keyboardHandlers["keydown-P"]();
+  eq(s.paused, true, "goal popup pauses (its own state)");
+  eq(s.pauseMenu.visible, false, "P does not open the menu over the goal popup");
+});
+
+test("pause: volume slider changes the master volume (0-100%, clamped)", () => {
+  const s = makeScene();
+  G.sfx.setVolume(1); // clean state — the volume lives in the sound module
+  s._stubs.keyboardHandlers["keydown-P"]();
+  s.setVolume(0.5);
+  eq(G.sfx.getVolume(), 0.5, "master volume 50%");
+  eq(s.pauseMenu.volText.text, "50%", "readout shows 50%");
+  eq(s.pauseMenu.handle.x, 0, "handle centred at 50%");
+  s.setVolume(0);
+  eq(G.sfx.getVolume(), 0, "0% is silent");
+  eq(s.pauseMenu.volText.text, "0%", "readout shows 0%");
+  s.setVolume(1);
+  eq(G.sfx.getVolume(), 1, "100% is full volume");
+  eq(s.pauseMenu.volText.text, "100%", "readout shows 100%");
+  s.setVolume(2);
+  eq(G.sfx.getVolume(), 1, "above 100% clamps to 1");
+  s.setVolume(-1);
+  eq(G.sfx.getVolume(), 0, "below 0% clamps to 0");
+  G.sfx.setVolume(1); // leave the module clean for the other tests
+});
+
+test("pause: clicking the volume track sets the volume from the position", () => {
+  const s = makeScene();
+  s._stubs.keyboardHandlers["keydown-P"]();
+  s.pauseMenu.track._handlers["pointerdown"]({ x: 480 }); // centre of the 330-630 track
+  eq(G.sfx.getVolume(), 0.5, "centre click = 50%");
+  s.pauseMenu.track._handlers["pointerdown"]({ x: 330 }); // left end
+  eq(G.sfx.getVolume(), 0, "left end = 0%");
+  s.pauseMenu.track._handlers["pointerdown"]({ x: 630 }); // right end
+  eq(G.sfx.getVolume(), 1, "right end = 100%");
+  G.sfx.setVolume(1);
+});
+
+test("pause: speed buttons in the menu set the speed", () => {
+  const s = makeScene();
+  s._stubs.keyboardHandlers["keydown-P"]();
+  s.pauseMenu.speedBtns[3].rect._handlers["pointerdown"]();
+  eq(s.speedMult, 3, "3x button sets 3x");
+  s.pauseMenu.speedBtns[4].rect._handlers["pointerdown"]();
+  eq(s.speedMult, 4, "4x button sets 4x");
+  s.pauseMenu.speedBtns[1].rect._handlers["pointerdown"]();
+  eq(s.speedMult, 1, "1x button back to normal");
+  eq(s.paused, true, "picking a speed does not unpause");
+});
+
+test("pause: 4x speed actually runs the game 4x faster (hunger ticks)", () => {
+  const s = makeScene();
+  s.setSpeed(4);
+  const f = s.fish[0];
+  f.hungerSec = 0;
+  step(s, 1); // 1 real second, no pellets dropped
+  approx(f.hungerSec, 4, 1e-9, "hunger advanced 4s in 1s at 4x, got " + f.hungerSec);
+  const s2 = makeScene();
+  s2.setSpeed(3);
+  const f2 = s2.fish[0];
+  f2.hungerSec = 0;
+  step(s2, 1);
+  approx(f2.hungerSec, 3, 1e-9, "hunger advanced 3s in 1s at 3x, got " + f2.hungerSec);
 });
 
 // ===========================================================================
@@ -1658,15 +1758,17 @@ test("hold-to-feed: a water press drops once and arms the hold", () => {
   s.onPointerDown({ x: 850, y: 150 });
   eq(s.pellets.length, 1, "the press itself drops one pellet");
   eq(s.feedHold, true, "hold armed by a successful drop");
-  eq(s.feedHoldTimer, G.CONFIG.feedHoldIntervalSec, "timer set to the full cadence");
+  eq(s.feedHoldTimer, 0, "timer starts at 0 — the first repeat waits out the 0.3s initial delay");
+  assert(typeof s.feedHoldAction === "function", "the shared hold action is armed");
 });
 
 test("hold-to-feed: holding for 1s drops ~5/s, not every frame", () => {
   const s = makeScene();
   s.onPointerDown({ x: 850, y: 150 });
   step(s, 1, () => keepFed(s));
-  // 1 press pellet + 10 cadence pellets (one per 0.1s).
-  eq(s.pellets.length, 11, "1 + 10 pellets after 1s of holding, got " + s.pellets.length);
+  // 1 press pellet + 8 cadence pellets: the first repeat waits out
+  // the 0.3s initial delay (frames at 300ms..1000ms), then one per 0.1s.
+  eq(s.pellets.length, 9, "1 + 8 pellets after 1s of holding, got " + s.pellets.length);
   eq(s.feedHold, true, "still holding");
 });
 
@@ -1678,7 +1780,7 @@ test("hold-to-feed: pellets follow the pointer as it moves", () => {
   step(s, 0.4, () => keepFed(s));
   const last = s.pellets[s.pellets.length - 1];
   eq(Math.round(last.sprite.x), 200, "latest pellet dropped at the moved pointer");
-  // updateFeedHold runs before updatePellets, so a fresh pellet sinks
+  // updateHold runs before updatePellets, so a fresh pellet sinks
   // one frame (40 px/s * 0.1s) before we look at it.
   assert(Math.abs(last.sprite.y - (300 + 40 * 0.1)) < 1e-9, "latest pellet dropped at the moved y minus one frame of sink: " + last.sprite.y);
 });
@@ -1808,8 +1910,128 @@ test("hold-to-feed: 2x speed scales the cadence with everything else", () => {
   step(s, 1, () => keepFed(s));
   // 1 real second = 10 frames; at 2x each frame is 0.2 sim-seconds, so
   // the 0.1s cadence fires on every frame — one drop per frame is the
-  // loop's granularity cap. 1 press + 10 frame drops.
-  eq(s.pellets.length, 11, "1 + 10 pellets at 2x (one per frame), got " + s.pellets.length);
+  // loop's granularity cap. 1 press + 8 frame drops (the first repeat
+  // waits out the 0.3s initial delay, frames at 300ms..1000ms).
+  eq(s.pellets.length, 9, "1 + 8 pellets at 2x (one per frame), got " + s.pellets.length);
+});
+
+// ===========================================================================
+// HOLD-REPEAT INITIAL DELAY: the first repeat waits 0.3s of continuous
+// hold (CONFIG.holdInitialDelaySec), so a quick tap is EXACTLY one
+// action. The old cadence started immediately, so a ~100-150ms click
+// dropped TWO $40 plants and charged $80 (found live, 3 of 10 clicks).
+// ===========================================================================
+test("hold-delay: config key is ~300ms", () => {
+  eq(G.CONFIG.holdInitialDelaySec, 0.3, "first repeat after 0.3s of continuous hold");
+});
+
+test("hold-delay: a ~150ms press drops exactly one food item", () => {
+  const s = makeScene();
+  s.onPointerDown({ x: 850, y: 150 });
+  step(s, 0.2, () => keepFed(s)); // 200ms — inside the delay, no repeat yet
+  eq(s.pellets.length, 1, "one pellet after a 200ms press, got " + s.pellets.length);
+  s.onPointerUp({ x: 850, y: 150 });
+  step(s, 0.5, () => keepFed(s));
+  eq(s.pellets.length, 1, "still one pellet after release — no delayed drop");
+  eq(s.money, 200 - 2, "charged for exactly one pellet");
+});
+
+test("hold-delay: a ~500ms hold drops several (press + 3 repeats)", () => {
+  const s = makeScene();
+  s.onPointerDown({ x: 850, y: 150 });
+  step(s, 0.5, () => keepFed(s)); // repeats at 300ms, 400ms, 500ms
+  eq(s.pellets.length, 4, "press + 3 repeats in 0.5s, got " + s.pellets.length);
+  eq(s.feedHold, true, "still holding");
+});
+
+test("hold-delay: a quick tap on a $40 plant drops exactly one plant", () => {
+  const s = makeScene();
+  s.selectFood("plant");
+  s.money = 5000;
+  s.onPointerDown({ x: 850, y: 150 });
+  step(s, 0.2, () => keepFed(s));
+  eq(s.feastPlants.length, 1, "one plant after a 200ms press");
+  s.onPointerUp({ x: 850, y: 150 });
+  step(s, 0.5, () => keepFed(s));
+  eq(s.feastPlants.length, 1, "still one plant after release");
+  eq(s.money, 5000 - 40, "charged $40, not $80");
+});
+
+// ===========================================================================
+// SPAM-BUY: holding a fish species button buys repeatedly at the food
+// cadence (0.1s, after the 0.3s initial delay), checking money and the
+// fish cap on every repeat. One-time purchases do NOT spam.
+// ===========================================================================
+test("spam-buy: holding the Guppy button buys several fish", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.guppyBtn.bg._handlers["pointerdown"]();
+  eq(s.fish.length, 3, "the press buys one guppy (2 starting + 1)");
+  eq(s.feedHold, true, "hold armed by the buy");
+  step(s, 0.5, () => keepFed(s)); // repeats at 300ms, 400ms, 500ms
+  eq(s.fish.length, 6, "press + 3 repeats = 6 fish, got " + s.fish.length);
+  eq(s.money, 5000 - 400, "$400 charged for 4 guppies");
+  eq(s.feedHold, true, "still holding");
+});
+
+test("spam-buy: a single quick click buys exactly one fish", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.guppyBtn.bg._handlers["pointerdown"]();
+  step(s, 0.2, () => keepFed(s)); // inside the delay — no repeat yet
+  eq(s.fish.length, 3, "one guppy after a 200ms press");
+  s.guppyBtn.bg._handlers["pointerup"]();
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 3, "still one guppy after release");
+  eq(s.money, 5000 - 100, "charged $100 once");
+});
+
+test("spam-buy: buying stops at the fish cap and cancels the hold", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.guppyBtn.bg._handlers["pointerdown"]();
+  step(s, 2, () => keepFed(s)); // far more repeats than the cap allows
+  eq(s.fish.length, 16, "capped at 16 fish (base cap)");
+  eq(s.feedHold, false, "hold cancelled at the cap");
+  eq(s.money, 5000 - 14 * 100, "$1,400 charged for the 14 bought guppies");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 16, "no further buys once capped");
+});
+
+test("spam-buy: buying stops when broke and cancels the hold", () => {
+  const s = makeScene();
+  s.money = 250; // two guppies, then broke
+  s.guppyBtn.bg._handlers["pointerdown"]();
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 4, "press + 1 repeat = 4 fish (2 starting + 2 bought)");
+  eq(s.money, 50, "$200 spent, $50 left — not enough for a third");
+  eq(s.feedHold, false, "hold cancelled when the buy failed");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.length, 4, "no further buys once broke");
+});
+
+test("spam-buy: other species spam too (Emberfin, at its own price)", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.emberfinBtn.bg._handlers["pointerdown"]();
+  step(s, 0.5, () => keepFed(s));
+  eq(s.fish.filter((f) => f.species === "emberfin").length, 4, "press + 3 repeats = 4 emberfins");
+  eq(s.money, 5000 - 4 * 250, "$1,000 charged for 4 emberfins");
+});
+
+test("spam-buy: one-time purchases do NOT spam on hold", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.snailBtn.bg._handlers["pointerdown"](); // Turbo the snail, $200, one-time
+  assert(s.snail !== null, "snail bought once");
+  eq(s.feedHold, false, "no hold armed by a one-time purchase");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.money, 5000 - 200, "charged $200 once, not per frame");
+  s.magnetBtn.bg._handlers["pointerdown"](); // Magnet level 1, $250, one-time
+  eq(s.magnetLevel, 1, "magnet bought once");
+  eq(s.feedHold, false, "no hold armed by the magnet either");
+  step(s, 0.5, () => keepFed(s));
+  eq(s.money, 5000 - 450, "charged $450 total, not per frame");
 });
 
 // ===========================================================================
@@ -2740,11 +2962,45 @@ test("plant: rendered ~152px tall — more than 2x a guppy, less than half the t
   eq(p.topOffset, -104, "top offset");
   eq(p.baseOffset, 48, "base offset");
   eq(p.heightPx, 152, "152px tall in all");
-  eq(p.fronds[0].scaleX, 3, "fronds scaled 3x");
-  assert(p.fronds[0].scaleY >= 2.5, "frond Y-scale ~3x, got " + p.fronds[0].scaleY);
+  // Fronds are authored AT display size (48x108) — no upscale, so
+  // scaleX is 1 and the only scale is the per-frond Y variation.
+  eq(p.fronds[0].scaleX, 1, "fronds not scaled up on X — texture is already display size");
+  eq(p.fronds[0].scaleY, 0.85, "first frond Y-scale 0.85");
+  eq(p.fronds[2].scaleY, 1.15, "third frond Y-scale 1.15");
+  eq(p.stem.texture, "feast-plant-stem", "detailed stem texture attached");
   eq(p.skeleton.texture, "feast-plant-skeleton", "skeleton visual attached");
   eq(p.counter.y, -144, "counter floats above the taller plant");
 });
+test("plant: three detailed frond variants, dealt round-robin, authored at display size", () => {
+  const s = makeScene();
+  const p = s.spawnFeastPlant(480, 200);
+  // Each frond is one of three variants — no two neighbouring fronds
+  // are the same blade, and the set across the plant has all three.
+  eq(p.fronds[0].texture, "feast-plant-frond-a", "frond 1 is variant a");
+  eq(p.fronds[1].texture, "feast-plant-frond-b", "frond 2 is variant b");
+  eq(p.fronds[2].texture, "feast-plant-frond-c", "frond 3 is variant c");
+  eq(p.fronds[3].texture, "feast-plant-frond-a", "frond 4 repeats a");
+  const keys = new Set(p.fronds.map((f) => f.texture));
+  eq(keys.size, 3, "three distinct frond textures on one plant");
+  // The old single key is gone — nothing is the stretched small blade.
+  assert(!keys.has("feast-plant-frond"), "no frond uses the old single-blade key");
+  // All fronds are authored at display size: scaleX is 1 everywhere.
+  for (let i = 0; i < 6; i++) eq(p.fronds[i].scaleX, 1, "frond " + i + " not upscaled on X");
+  eq(p.stem.texture, "feast-plant-stem", "detailed stem texture (rings + roots), not a flat rectangle");
+  eq(p.skeleton.texture, "feast-plant-skeleton", "detailed skeleton texture");
+});
+
+test("plant: the detailed textures are generated at create()", () => {
+  const s = makeScene();
+  for (const key of ["feast-plant-frond-a", "feast-plant-frond-b", "feast-plant-frond-c",
+    "feast-plant-stem", "feast-plant-skeleton"]) {
+    assert(s._stubs.generated.includes(key), "texture generated: " + key);
+  }
+  assert(typeof G.makeFeastPlantFrondTexture === "function", "frond generator exported");
+  assert(typeof G.makeFeastPlantStemTexture === "function", "stem generator exported");
+  assert(typeof G.makeFeastPlantSkeletonTexture === "function", "skeleton generator exported");
+});
+
 test("plant: nibble range is measured to the plant's body — a fish at its top fronds can bite", () => {
   // Plant anchored: centre 386, top 282, base 434. A fish at (480, 300)
   // sits against the plant's upper fronds — 86px from the centre, but
@@ -2786,9 +3042,11 @@ test("plant: hold-down spawns plants at the pellet repeat rate with no cap to st
   eq(s.feastPlants.length, 1, "the press drops one plant");
   eq(s.feedHold, true, "hold armed");
   step(s, 0.5, () => keepFed(s));
-  eq(s.feastPlants.length, 6, "press + 5 cadence drops in 0.5s, got " + s.feastPlants.length);
+  // Press + 3 cadence drops in 0.5s: the first repeat waits out the
+  // 0.3s initial delay (frames at 300ms, 400ms, 500ms).
+  eq(s.feastPlants.length, 4, "press + 3 cadence drops in 0.5s, got " + s.feastPlants.length);
   eq(s.feedHold, true, "hold keeps going — no cap stops it");
-  eq(s.money, 5000 - 240, "$240 charged for 6 plants");
+  eq(s.money, 5000 - 160, "$160 charged for 4 plants");
 });
 test("plant: sprint applies to a sinking plant and to an anchored plant in the 40-120px window", () => {
   // Sinking plant 80px away.
