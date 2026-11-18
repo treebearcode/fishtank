@@ -712,11 +712,12 @@ test("scene: feeder button becomes ON/OFF toggle; tank/decor/magnet show state",
   s.buyDecoration("castle", G.CONFIG.castleCost);
   s.updateShopUI();
   eq(s.decorBtn.text.text, "Decor ✓", "all three owned: Decor ✓");
-  // V4.1 PHASE 2: the magnet is a chain now — one buy is L1.
+  // V4.1 PHASE 2: the magnet is a drag chain now — one buy is L1
+  // (Drag 60, $400); the next level is $600.
   s.buyMagnet();
   s.updateShopUI();
   eq(s.magnetLevel, 1, "one buyMagnet is level 1");
-  eq(s.magnetBtn.text.text, "Magnet L1 · $400", "label shows level and next cost");
+  eq(s.magnetBtn.text.text, "Magnet L1 · $600", "label shows level and next cost");
   s.buyCrab();
   s.updateShopUI();
   eq(s.crabBtn.text.text, "Claws ✓");
@@ -1431,26 +1432,28 @@ test("V4.1 scene: only LARGE Chompers hunt (medium Chomper ignores babies)", () 
 // ===========================================================================
 // 12. V4.1 PHASE 2: DECOR PANEL, MAGNET CHAIN, DESCRIPTION BAR
 // ===========================================================================
-test("V4.1 P2: MAGNET_LEVELS — costs 250/400/600/900, radii 0/60/110/170", () => {
-  eq(G.MAGNET_LEVELS.length, 4);
-  eq(JSON.stringify(G.MAGNET_LEVELS.map((l) => l.cost)), JSON.stringify([250, 400, 600, 900]));
-  eq(JSON.stringify(G.MAGNET_LEVELS.map((l) => l.radius)), JSON.stringify([0, 60, 110, 170]));
-  eq(G.MAGNET_LEVELS[0].name, "Hover collect");
-  eq(G.MAGNET_LEVELS[1].name, "Drag 60");
-  eq(G.MAGNET_LEVELS[2].name, "Drag 110");
-  eq(G.MAGNET_LEVELS[3].name, "Drag 170");
+test("V4.1 P2: MAGNET_LEVELS — costs 400/600/900, radii 60/110/170, no $250 level", () => {
+  eq(G.MAGNET_LEVELS.length, 3, "three drag levels — hover is free, not a level");
+  eq(JSON.stringify(G.MAGNET_LEVELS.map((l) => l.cost)), JSON.stringify([400, 600, 900]));
+  eq(JSON.stringify(G.MAGNET_LEVELS.map((l) => l.radius)), JSON.stringify([60, 110, 170]));
+  eq(G.MAGNET_LEVELS[0].name, "Drag 60");
+  eq(G.MAGNET_LEVELS[1].name, "Drag 110");
+  eq(G.MAGNET_LEVELS[2].name, "Drag 170");
+  assert(!G.MAGNET_LEVELS.some((l) => l.cost === 250), "no $250 magnet level exists");
+  assert(!G.MAGNET_LEVELS.some((l) => l.name === "Hover collect"), "hover is not a purchasable level");
 });
 test("V4.1 P2: magnetLevelCost / magnetRadiusFor per level", () => {
-  eq(G.magnetLevelCost(0), 250); eq(G.magnetLevelCost(1), 400);
-  eq(G.magnetLevelCost(2), 600); eq(G.magnetLevelCost(3), 900);
-  eq(G.magnetLevelCost(4), null, "MAX has no next cost");
-  eq(G.magnetRadiusFor(0), 0, "not owned: no drag");
-  eq(G.magnetRadiusFor(1), 0, "L1 is hover-only: no drag");
-  eq(G.magnetRadiusFor(2), 60);
-  eq(G.magnetRadiusFor(3), 110);
-  eq(G.magnetRadiusFor(4), 170);
-  assert(G.magnetRadiusFor(4) > G.magnetRadiusFor(3) && G.magnetRadiusFor(3) > G.magnetRadiusFor(2),
-    "radii increase per level");
+  eq(G.magnetLevelCost(0), 400); eq(G.magnetLevelCost(1), 600);
+  eq(G.magnetLevelCost(2), 900);
+  eq(G.magnetLevelCost(3), null, "MAX has no next cost");
+  assert(G.magnetLevelCost(0) !== 250 && G.magnetLevelCost(1) !== 250 && G.magnetLevelCost(2) !== 250,
+    "no level costs $250");
+  eq(G.magnetRadiusFor(0), 0, "level 0 is hover-only: no drag");
+  eq(G.magnetRadiusFor(1), 60);
+  eq(G.magnetRadiusFor(2), 110);
+  eq(G.magnetRadiusFor(3), 170);
+  assert(G.magnetRadiusFor(3) > G.magnetRadiusFor(2) && G.magnetRadiusFor(2) > G.magnetRadiusFor(1),
+    "radii grow per level");
 });
 test("V4.1 P2: magnetDragCoin — drags within radius, ignores outside, collects on touch", () => {
   // Inside the radius: moves toward the pointer, capped by speed*dt.
@@ -1566,35 +1569,30 @@ test("V4.1 P2: buying a decoration twice is denied, and a broke buy is denied", 
   eq(s.money, 50, "castle denied when broke");
   assert(!s.decorations.castle, "castle not owned");
 });
-test("V4.1 P2: magnet L1 hover-collects without a click", () => {
+test("V4.1 P2: hover-collect is default — no magnet purchase needed", () => {
   const s = makeScene();
   s.money = 1000;
-  // No magnet yet: hovering over a coin does nothing.
+  eq(s.magnetLevel, 0, "no magnet owned");
+  // Hovering over a coin collects it with NO magnet purchased.
   const f = s.fish[0];
   s.dropCoin(f);
   const coin = s.coins[s.coins.length - 1];
+  const moneyBefore = s.money;
   s.onPointerMove({ x: coin.container.x, y: coin.container.y });
-  assert(s.coins.includes(coin), "no hover-collect before L1");
-  // Buy L1: hovering the same coin collects it, no click.
-  s.buyMagnet();
-  eq(s.magnetLevel, 1);
-  const moneyAfterBuy = s.money;
-  s.onPointerMove({ x: coin.container.x, y: coin.container.y });
-  assert(!s.coins.includes(coin), "hover collected the coin at L1");
-  assert(s.money > moneyAfterBuy, "hover-collect banks the coin value");
+  assert(!s.coins.includes(coin), "hover collected the coin at level 0");
+  assert(s.money > moneyBefore, "hover-collect banks the coin value");
 });
-test("V4.1 P2: magnet L2 drags a coin within radius toward the pointer, not one outside it", () => {
+test("V4.1 P2: magnet L1 drags a coin within radius toward the pointer, not one outside it", () => {
   const s = makeScene();
   s.money = 5000;
-  s.buyMagnet(); // L1
-  s.buyMagnet(); // L2
-  eq(s.magnetLevel, 2);
+  s.buyMagnet(); // L1 Drag 60 — $400
+  eq(s.magnetLevel, 1);
   const f = s.fish[0];
-  // Coin 50px from the pointer (inside L2's 60px radius), sinking.
+  // Coin 50px from the pointer (inside L1's 60px radius), sinking.
   s.dropCoin(f);
   const near = s.coins[s.coins.length - 1];
   near.container.x = 400; near.container.y = 200;
-  // Coin 150px away (outside L2's 60px radius).
+  // Coin 150px away (outside L1's 60px radius).
   s.dropCoin(f);
   const far = s.coins[s.coins.length - 1];
   far.container.x = 650; far.container.y = 200;
@@ -1605,28 +1603,46 @@ test("V4.1 P2: magnet L2 drags a coin within radius toward the pointer, not one 
   assert(near.container.x > nearX0 + 20, "near coin dragged toward the pointer: " + nearX0 + " -> " + near.container.x.toFixed(1));
   approx(far.container.x, farX0, 2, "far coin barely moved (only the sink wobble): " + farX0 + " -> " + far.container.x.toFixed(1));
 });
-test("V4.1 P2: magnet L3 drags a coin L2 cannot reach", () => {
+test("V4.1 P2: magnet L2 drags a coin L1 cannot reach", () => {
   const s = makeScene();
   s.money = 5000;
-  s.buyMagnet(); s.buyMagnet(); // L2
+  s.buyMagnet(); // L1 Drag 60
   const f = s.fish[0];
   s.dropCoin(f);
   const coin = s.coins[s.coins.length - 1];
   coin.container.x = 400; coin.container.y = 200;
-  s.onPointerMove({ x: 500, y: 200 }); // 100px away: outside L2's 60px
+  s.onPointerMove({ x: 500, y: 200 }); // 100px away: outside L1's 60px
   const x0 = coin.container.x;
   step(s, 0.5, () => keepFed(s));
-  approx(coin.container.x, x0, 2, "L2 does not drag a coin 100px away");
-  // Upgrade to L3 (radius 110): the same coin is now in range.
+  approx(coin.container.x, x0, 2, "L1 does not drag a coin 100px away");
+  // Upgrade to L2 (radius 110): the same coin is now in range.
+  s.buyMagnet();
+  eq(s.magnetLevel, 2);
+  step(s, 0.5, () => keepFed(s));
+  assert(coin.container.x > x0 + 20, "L2 drags the 100px-away coin: " + x0 + " -> " + coin.container.x.toFixed(1));
+});
+test("V4.1 P2: magnet L3 drags a coin 150px away that L2 cannot reach", () => {
+  const s = makeScene();
+  s.money = 5000;
+  s.buyMagnet(); s.buyMagnet(); // L2 Drag 110
+  const f = s.fish[0];
+  s.dropCoin(f);
+  const coin = s.coins[s.coins.length - 1];
+  coin.container.x = 400; coin.container.y = 200;
+  s.onPointerMove({ x: 550, y: 200 }); // 150px away: outside L2's 110px
+  const x0 = coin.container.x;
+  step(s, 0.5, () => keepFed(s));
+  approx(coin.container.x, x0, 2, "L2 does not drag a coin 150px away");
+  // Upgrade to L3 (radius 170): the same coin is now in range.
   s.buyMagnet();
   eq(s.magnetLevel, 3);
   step(s, 0.5, () => keepFed(s));
-  assert(coin.container.x > x0 + 20, "L3 drags the 100px-away coin: " + x0 + " -> " + coin.container.x.toFixed(1));
+  assert(coin.container.x > x0 + 20, "L3 drags the 150px-away coin: " + x0 + " -> " + coin.container.x.toFixed(1));
 });
 test("V4.1 P2: magnet drag collects on touch and never leaves the water", () => {
   const s = makeScene();
   s.money = 5000;
-  s.buyMagnet(); s.buyMagnet(); // L2
+  s.buyMagnet(); // L1 Drag 60
   const f = s.fish[0];
   s.dropCoin(f);
   const coin = s.coins[s.coins.length - 1];
@@ -1650,50 +1666,48 @@ test("V4.1 P2: magnet drag collects on touch and never leaves the water", () => 
   assert(coin2.container.y >= 48, "dragged coin never leaves the top of the water");
   assert(coin2.container.x >= 20 && coin2.container.x <= 940, "dragged coin never leaves the tank sides");
 });
-test("V4.1 P2: magnet buys are denied when broke, and MAX after L4", () => {
+test("V4.1 P2: magnet buys are denied when broke, and MAX after L3", () => {
   const s = makeScene();
   s.money = 100;
   s.buyMagnet();
   eq(s.magnetLevel, 0, "L1 denied at $100");
   eq(s.money, 100, "money untouched");
   s.money = 3000;
-  s.buyMagnet(); eq(s.magnetLevel, 1); eq(s.money, 2750, "L1 costs $250");
-  s.buyMagnet(); eq(s.magnetLevel, 2); eq(s.money, 2350, "L2 costs $400");
-  s.buyMagnet(); eq(s.magnetLevel, 3); eq(s.money, 1750, "L3 costs $600");
-  s.buyMagnet(); eq(s.magnetLevel, 4); eq(s.money, 850, "L4 costs $900");
-  eq(s.magnetBtn.text.text, "Magnet ✓ MAX", "button shows MAX after L4");
+  s.buyMagnet(); eq(s.magnetLevel, 1); eq(s.money, 2600, "L1 costs $400");
+  s.buyMagnet(); eq(s.magnetLevel, 2); eq(s.money, 2000, "L2 costs $600");
+  s.buyMagnet(); eq(s.magnetLevel, 3); eq(s.money, 1100, "L3 costs $900");
+  eq(s.magnetBtn.text.text, "Magnet ✓ MAX", "button shows MAX after L3");
   assert(s.magnetTip().indexOf("MAX") >= 0, "tip says MAX: " + s.magnetTip());
   s.buyMagnet();
-  eq(s.magnetLevel, 4, "no level 5");
-  eq(s.money, 850, "no charge after MAX");
+  eq(s.magnetLevel, 3, "no level 4");
+  eq(s.money, 1100, "no charge after MAX");
 });
 test("V4.1 P2: magnet labels show level and next cost at every level", () => {
   const s = makeScene();
   s.money = 5000;
-  eq(s.magnetLabel(), "Magnet $250", "L0 shows the L1 cost");
-  s.buyMagnet(); eq(s.magnetLabel(), "Magnet L1 · $400");
-  s.buyMagnet(); eq(s.magnetLabel(), "Magnet L2 · $600");
-  s.buyMagnet(); eq(s.magnetLabel(), "Magnet L3 · $900");
+  eq(s.magnetLabel(), "Magnet $400", "L0 shows the first cost");
+  s.buyMagnet(); eq(s.magnetLabel(), "Magnet L1 · $600");
+  s.buyMagnet(); eq(s.magnetLabel(), "Magnet L2 · $900");
   s.buyMagnet(); eq(s.magnetLabel(), "Magnet ✓ MAX");
   assert(s.magnetTip().indexOf("Drag 170") >= 0, "MAX tip names Drag 170");
   assert(s.magnetTip().indexOf("170px") >= 0, "MAX tip names the radius");
 });
-test("V4.1 P2: old magnet drift is gone — L1 does not pull coins to the centre", () => {
+test("V4.1 P2: old magnet drift is gone — level 0 does not pull coins to the centre", () => {
   const s = makeScene();
   s.money = 1000;
-  s.buyMagnet(); // L1 only: hover, no drift, no drag
+  // Level 0: hover only, no drift, no drag.
   const f = s.fish[0];
   s.dropCoin(f);
   const coin = s.coins[s.coins.length - 1];
   coin.container.x = 100; coin.container.y = 100;
   step(s, 1, () => keepFed(s));
   assert(Math.abs(coin.container.x - 100) < 5,
-    "L1 coin does not drift toward the centre (old drift moved it 30px/s): x=" + coin.container.x.toFixed(1));
+    "level-0 coin does not drift toward the centre (old drift moved it 30px/s): x=" + coin.container.x.toFixed(1));
 });
 test("V4.1 P2: magnet drag does not fight Turbo — he still collects landed coins", () => {
   const s = makeScene();
   s.money = 5000;
-  s.buyMagnet(); // L1 only: hover, no drag — Turbo's floor is untouched
+  s.buyMagnet(); // L1 Drag 60 — the pointer stays far away, so drag never reaches the coin
   s.buyTurboOrSpeed();
   assert(s.snail !== null, "Turbo bought");
   const f = s.fish[0];
@@ -1701,6 +1715,7 @@ test("V4.1 P2: magnet drag does not fight Turbo — he still collects landed coi
   const coin = s.coins[s.coins.length - 1];
   // Land the coin right under Turbo and let him collect it.
   coin.container.x = s.snail.sprite.x; coin.container.y = G.CONFIG.floorY;
+  s.onPointerMove({ x: 850, y: 100 }); // pointer far from the coin: no drag, no hover-collect
   const moneyBefore = s.money;
   step(s, 1, () => keepFed(s));
   assert(!s.coins.includes(coin), "Turbo still collects a landed coin with the magnet owned");
@@ -1710,11 +1725,12 @@ test("V4.1 P2: description bar text on hover for magnet and decor", () => {
   const s = makeScene();
   s.money = 5000;
   s.magnetBtn.bg._handlers["pointerover"]();
-  assert(s.descBarText.text.indexOf("$250") >= 0, "magnet bar shows the L1 cost: " + s.descBarText.text);
-  assert(s.descBarText.text.indexOf("Hover collect") >= 0, "magnet bar names L1");
+  assert(s.descBarText.text.indexOf("$400") >= 0, "magnet bar shows the L1 cost: " + s.descBarText.text);
+  assert(s.descBarText.text.indexOf("Drag 60") >= 0, "magnet bar names L1");
+  assert(s.descBarText.text.indexOf("free") >= 0, "magnet bar says hover is free: " + s.descBarText.text);
   s.buyMagnet();
   s.magnetBtn.bg._handlers["pointerover"]();
-  assert(s.descBarText.text.indexOf("$400") >= 0, "magnet bar shows the next cost after L1: " + s.descBarText.text);
+  assert(s.descBarText.text.indexOf("$600") >= 0, "magnet bar shows the next cost after L1: " + s.descBarText.text);
   s.decorBtn.bg._handlers["pointerover"]();
   assert(s.descBarText.text.indexOf("Decorations") >= 0, "decor bar names the panel: " + s.descBarText.text);
   assert(s.descBarText.text.indexOf("+0%") >= 0, "decor bar shows the current bonus: " + s.descBarText.text);
@@ -2027,11 +2043,11 @@ test("spam-buy: one-time purchases do NOT spam on hold", () => {
   eq(s.feedHold, false, "no hold armed by a one-time purchase");
   step(s, 0.5, () => keepFed(s));
   eq(s.money, 5000 - 200, "charged $200 once, not per frame");
-  s.magnetBtn.bg._handlers["pointerdown"](); // Magnet level 1, $250, one-time
+  s.magnetBtn.bg._handlers["pointerdown"](); // Magnet level 1, $400 (drag chain, not a one-time buy)
   eq(s.magnetLevel, 1, "magnet bought once");
   eq(s.feedHold, false, "no hold armed by the magnet either");
   step(s, 0.5, () => keepFed(s));
-  eq(s.money, 5000 - 450, "charged $450 total, not per frame");
+  eq(s.money, 5000 - 600, "charged $600 total, not per frame");
 });
 
 // ===========================================================================

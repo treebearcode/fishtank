@@ -65,8 +65,9 @@ export class TankScene extends Phaser.Scene {
     this.feederOwned = false;    // feeder-bot bought? ($400, once)
     this.feederOn = false;       // feeder-bot toggle (only when owned)
     this.feederTimer = 0;        // seconds since the last auto pellet
-    // MAGNET CHAIN: magnetLevel 0 = not owned, 1-4 = the chain levels
-    // (see magnet.js). magnetOwned is kept in sync (level > 0).
+    // MAGNET: magnetLevel 0 = hover-only baseline (always on), 1-3 =
+    // the drag chain levels (see magnet.js). magnetOwned is kept in
+    // sync (level > 0) — true once a drag level is owned.
     this.magnetLevel = 0;
     this.magnetOwned = false;
     // POINTER: the magnet drag/hover needs the last known pointer
@@ -274,8 +275,8 @@ export class TankScene extends Phaser.Scene {
         : "Feeder-bot: OFF — click to turn it back ON.");
     // MAGNET: one wide button spanning cols 7-8 (centre x = slotW * 8,
     // width 206) — its label carries the level AND the next cost, e.g.
-    // "Magnet L1 · $400".
-    this.magnetBtn = this.makeShopButton(SHOP.slotW * 8, R1, BW * 2 + 6, BH, "Magnet $250", () => this.buyMagnet(), "🧲",
+    // "Magnet L1 · $600".
+    this.magnetBtn = this.makeShopButton(SHOP.slotW * 8, R1, BW * 2 + 6, BH, "Magnet $400", () => this.buyMagnet(), "🧲",
       () => this.magnetTip());
     // Row 2 (y = 514): food selector + uncap toggle + decor + tank + pause + sell.
     this.foodBtn = this.makeShopButton(col(0), R2, BW, BH, "Food: Std", () => this.toggleFoodPanel(), "🍤",

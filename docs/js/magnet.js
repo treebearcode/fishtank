@@ -1,8 +1,9 @@
-// magnet.js — the Coin Magnet, a 4-LEVEL CHAIN on one shop button.
-// Level 0 = not owned.
-//   L1 Hover collect: coins are collected by HOVERING the pointer over
-//      them (24px hitbox, same as clicking); clicking still works too.
-//   L2-L4 Drag: coins within radius px of the cursor are gently dragged
+// magnet.js — the Coin Magnet: hover-collect is DEFAULT, the shop
+// button sells a 3-LEVEL DRAG CHAIN.
+//   Hover collect (default, level 0): coins are collected by HOVERING
+//      the pointer over them (24px hitbox, same as clicking); clicking
+//      still works too. No purchase, no level — always on.
+//   L1-L3 Drag: coins within radius px of the cursor are gently dragged
 //      toward it (MAGNET_DRAG_SPEED_PX) and collected on touch
 //      (MAGNET_COLLECT_PX). Radii grow per level: 60 / 110 / 170.
 
@@ -10,7 +11,6 @@ import { CONFIG } from "./config.js";
 import { coinHitAt } from "./input.js";
 
 export const MAGNET_LEVELS = [
-  { cost: 250, radius: 0,   name: "Hover collect" },
   { cost: 400, radius: 60,  name: "Drag 60" },
   { cost: 600, radius: 110, name: "Drag 110" },
   { cost: 900, radius: 170, name: "Drag 170" },
@@ -18,12 +18,13 @@ export const MAGNET_LEVELS = [
 export const MAGNET_DRAG_SPEED_PX = 150; // px/s — a gentle pull, not a yank
 export const MAGNET_COLLECT_PX = 14;     // collect when a dragged coin touches the cursor
 
-// Cost to buy the NEXT level from `level` (0..3), or null at MAX (4).
+// Cost to buy the NEXT level from `level` (0..2), or null at MAX (3).
 export function magnetLevelCost(level) {
   return level >= 0 && level < MAGNET_LEVELS.length ? MAGNET_LEVELS[level].cost : null;
 }
 
-// Drag radius at `level` (0 = not owned -> 0, 1 = hover only -> 0).
+// Drag radius at `level` (0 = hover-only baseline -> 0, 1 = Drag 60,
+// 2 = Drag 110, 3 = Drag 170).
 export function magnetRadiusFor(level) {
   return level >= 1 && level <= MAGNET_LEVELS.length ? MAGNET_LEVELS[level - 1].radius : 0;
 }
@@ -49,9 +50,10 @@ export function magnetDragCoin(coinX, coinY, pointerX, pointerY, radius, dt, spe
   return { x: cx, y: cy, collect: nd <= MAGNET_COLLECT_PX };
 }
 
-// HOVER COLLECT (pure): L1 collects a coin when the pointer is over
-// it — the same generous 24px hitbox as clicking (coinHitAt), so
-// hovering feels exactly like clicking, minus the click.
+// HOVER COLLECT (pure): hovering collects a coin — the same generous
+// 24px hitbox as clicking (coinHitAt), so hovering feels exactly like
+// clicking, minus the click. It is the default behaviour (level 0),
+// not a purchase.
 export function magnetHoverAt(coinX, coinY, px, py) {
   return coinHitAt(coinX, coinY, px, py);
 }

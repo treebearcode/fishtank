@@ -105,15 +105,15 @@ export const inputMixin = {
 
   onPointerMove(pointer) {
     // Track the pointer for the magnet, even when no fish is being
-    // dragged. L1 HOVER COLLECT: hovering over a coin collects it
-    // (same 24px hitbox as clicking) — no click needed. Hovering never
-    // collects while a fish is being dragged, and never fires before
-    // the game starts / while paused.
+    // dragged. HOVER COLLECT (default): hovering over a coin collects
+    // it (same 24px hitbox as clicking) — no click needed, no purchase.
+    // Hovering never collects while a fish is being dragged, and never
+    // fires before the game starts / while paused.
     if (this.started && !this.paused && !this.goalPopupShown && pointer.y < CONFIG.waterBottom) {
       this.pointerX = pointer.x;
       this.pointerY = pointer.y;
       this.pointerSeen = true;
-      if (this.magnetLevel >= 1 && !this.dragFish) {
+      if (!this.dragFish) {
         for (const coin of [...this.coins]) {
           if (magnetHoverAt(coin.container.x, coin.container.y, pointer.x, pointer.y)) {
             this.collectCoin(coin);

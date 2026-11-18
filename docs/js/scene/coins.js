@@ -77,7 +77,7 @@ export const coinsMixin = {
     }
   },
 
-  // MAGNET DRAG (L2+): coins within the level's radius of the cursor
+  // MAGNET DRAG (L1+): coins within the level's radius of the cursor
   // are gently dragged toward it (150 px/s) and collected on touch
   // (~14px). Sinking AND landed coins are dragged; magnetDragCoin
   // clamps the result into the water, so a coin can never be pulled
@@ -88,7 +88,7 @@ export const coinsMixin = {
   // (pointerSeen) — before the player first moves the pointer, nothing
   // is dragged.
   updateMagnetDrag(dt) {
-    if (this.magnetLevel >= 2 && this.pointerSeen) {
+    if (this.magnetLevel >= 1 && this.pointerSeen) {
       const radius = magnetRadiusFor(this.magnetLevel);
       for (const coin of [...this.coins]) {
         if (!this.coins.includes(coin)) continue;

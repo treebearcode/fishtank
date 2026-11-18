@@ -90,10 +90,10 @@ deploys this repo's `docs/` folder.)
   crab $300 (grabs coins while they sink), feeder-bot $400 (a robot pet
   that swims the upper water and drops a $2 pellet every 15s, ON/OFF
   toggle).
-- **Coin Magnet chain:** one button, four levels — L1 $250 hover
-  collect, L2 $400 / L3 $600 / L4 $900 drag radii 60/110/170. Coins
-  within the radius are gently pulled to the cursor and collected on
-  touch.
+- **Coin Magnet:** hovering over a coin collects it, free, from the
+  start. One button buys three drag levels — L1 $400 / L2 $600 /
+  L3 $900, drag radii 60/110/170. Coins within the radius are gently
+  pulled to the cursor and collected on touch.
 - **Decorations:** one "Decor" button opens a panel with Coral $75,
   Treasure Chest $100, Castle $150 — +5% coin value each (max +15%),
   paid in cents.
@@ -177,7 +177,7 @@ deploys this repo's `docs/` folder.)
     becomes Turbo Speed **$150** (60 → 90 px/s, once), Crab Claws
     **$300** (collects coins while they sink, ~60 px/s),
     Feeder-bot **$400** (ON/OFF toggle after purchase), Magnet
-    **$250 → $900** (hover collect, then three drag levels).
+    **$400 → $900** (hover collect is free; three drag levels).
   - Row 2: Food selector (Standard $2 / Deluxe $5), Decor **panel**
     (Coral $75, Treasure Chest $100, Castle $150 — one of each, +5% coin
     value each, paid in cents), Tank Upgrade **$200** (cap 16 → 28,
@@ -217,7 +217,7 @@ docs/
     snail.js          Pure snail targeting / overshoot / collect checks
     animation.js      Pure tail wiggle / joint / tilt / drift math
     input.js          Pure hitboxes and the pointer-target resolver
-    magnet.js         Magnet chain levels + pure drag/hover math
+    magnet.js         Magnet drag-chain levels + pure drag/hover math
     sound.js          Tiny WebAudio beeps (no audio files)
     textures.js       All procedural art (fish, coins, snail, crab, bot, egg)
     index.js          Barrel re-exporting everything (tests import this)

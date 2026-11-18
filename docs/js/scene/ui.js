@@ -126,9 +126,10 @@ export const uiMixin = {
     const allDecorOwned = unowned.length === 0;
     this.setButtonEnabled(this.decorBtn, !allDecorOwned && this.money >= cheapest,
       allDecorOwned ? "Decor ✓" : "Decor");
-    // Magnet chain: one button, four levels. The label carries the level
-    // AND the next cost (see magnetLabel); the button greys out when the
-    // next level is unaffordable, and shows "Magnet ✓ MAX" at L4.
+    // Magnet chain: one button, three drag levels (hover is free).
+    // The label carries the level AND the next cost (see magnetLabel);
+    // the button greys out when the next level is unaffordable, and
+    // shows "Magnet ✓ MAX" at L3.
     const nextCost = magnetLevelCost(this.magnetLevel);
     this.setButtonEnabled(this.magnetBtn, nextCost !== null && this.money >= nextCost,
       this.magnetLabel());

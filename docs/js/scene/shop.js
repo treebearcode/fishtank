@@ -308,10 +308,10 @@ export const shopMixin = {
     this.updateTopUI();
   },
 
-  // Coin Magnet is a 4-LEVEL CHAIN on one button. Each buy takes the
-  // NEXT level (see magnet.js). Costs come from the float money
-  // balance, like every other buy. After L4 the button shows
-  // "Magnet ✓ MAX" and there is nothing left to buy.
+  // Coin Magnet is a 3-LEVEL DRAG CHAIN on one button (hover-collect
+  // is free — see magnet.js). Each buy takes the NEXT level. Costs
+  // come from the float money balance, like every other buy. After L3
+  // the button shows "Magnet ✓ MAX" and there is nothing left to buy.
   buyMagnet() {
     const cost = magnetLevelCost(this.magnetLevel);
     if (cost === null || this.money < cost) { sfx.denied(); return; }
@@ -328,8 +328,8 @@ export const shopMixin = {
   },
 
   // The magnet button label — level AND next cost, e.g.
-  // "Magnet L1 · $400". Before any purchase it shows the L1 cost
-  // ("Magnet $250"); at MAX it shows "Magnet ✓ MAX".
+  // "Magnet L1 · $600". Before any purchase it shows the first cost
+  // ("Magnet $400"); at MAX it shows "Magnet ✓ MAX".
   magnetLabel() {
     if (this.magnetLevel >= MAGNET_LEVELS.length) return "Magnet ✓ MAX";
     const next = magnetLevelCost(this.magnetLevel);
@@ -338,10 +338,11 @@ export const shopMixin = {
   },
 
   // The magnet description for the fixed bar — what the current level
-  // does, plus the next level and its cost.
+  // does, plus the next level and its cost. Hover-collect is free at
+  // every level, so the tip names it at L0 and only drag levels after.
   magnetTip() {
     if (this.magnetLevel === 0) {
-      return "Coin Magnet — $250. L1 Hover collect: hover over a coin to collect it (clicking still works).";
+      return "Coin Magnet — $400. L1 Drag 60: coins within 60px are gently pulled to your cursor and collected on touch. Hovering over a coin collects it for free.";
     }
     const cur = MAGNET_LEVELS[this.magnetLevel - 1];
     const next = magnetLevelCost(this.magnetLevel);
@@ -350,9 +351,7 @@ export const shopMixin = {
     }
     const nxt = MAGNET_LEVELS[this.magnetLevel];
     return "Magnet L" + this.magnetLevel + " — " + cur.name + ": " +
-      (this.magnetLevel === 1
-        ? "hover over a coin to collect it."
-        : "coins within " + cur.radius + "px are pulled to your cursor.") +
+      "coins within " + cur.radius + "px are pulled to your cursor." +
       " Next: L" + (this.magnetLevel + 1) + " " + nxt.name + " — $" + next + ".";
   },
 
