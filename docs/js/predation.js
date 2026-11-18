@@ -28,7 +28,7 @@ export function isHuntablePrey(prey) {
 
 export function canHunt(hunter, prey) {
   if (!hunter || !prey) return false;
-  if (hunter.species !== "chomper" || hunter.stage !== 2) return false;
+  if (hunter.species !== "chomper" || hunter.stage < 2) return false;
   if ((hunter.hungerSec || 0) <= 0) return false; // well-fed: no hunting
   if (hunter.grabbed) return false;
   return isHuntablePrey(prey);

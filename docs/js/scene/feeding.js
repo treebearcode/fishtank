@@ -170,12 +170,12 @@ export const feedingMixin = {
 
   // One fish takes one bite of a plant: 1 full feed (same as a
   // pellet), plus the plant's own pacing — this fish waits 1.5s
-  // before its next plant bite, and the plant waits 0.4s before
-  // anyone's next bite.
+  // before its next plant bite (a Greedy fish chews in 1.0s), and the
+  // plant waits 0.4s before anyone's next bite.
   nibblePlant(fish, plant) {
     plant.nibbles -= 1;
     plant.biteTimer = CONFIG.plantGlobalSec;
-    fish.plantChewSec = CONFIG.plantChewSec;
+    fish.plantChewSec = fish.trait === "greedy" ? CONFIG.greedyChewSec : CONFIG.plantChewSec;
     this.applyFeed(fish, 1, plant.container.x, plant.container.y);
     this.updatePlantFronds(plant);
   },
@@ -253,14 +253,20 @@ export const feedingMixin = {
     fish.driftX = drift.x; fish.driftY = drift.y;
     fish.driftSec = CONFIG.postMealDriftSec;
     // Growth thresholds come from the fish's species (Chomper grows at
-    // 4/8 feeds, everyone else at 3/6).
-    const newStage = stageForFeeds(fish.feeds, fish.species);
+    // 4/8 feeds, everyone else at 3/6) — and stage 3 (royal) needs the
+    // gene as well as the feeds: a non-gene fish caps at large no
+    // matter how much it eats (see stageForFeeds).
+    const newStage = stageForFeeds(fish.feeds, fish.species, fish.royalGene);
     if (newStage !== fish.stage) {
       fish.stage = newStage;
       this.setFishStageVisual(fish); // body + tail texture and scale
       const boosted = coinValueWithBonus(coinValueForStage(newStage, fish.species), decorCount(this.decorations));
       const sp = speciesDef(fish.species);
-      this.toast(newStage === 2 ? "A " + sp.name.toLowerCase() + " grew into a LARGE fish! It drops " + moneyFmt(boosted) + " coins now." : "A " + sp.name.toLowerCase() + " grew into a MEDIUM fish! It drops " + moneyFmt(boosted) + " coins now.");
+      this.toast(newStage === 3
+        ? "👑 A " + sp.name.toLowerCase() + " turned ROYAL! It drops " + moneyFmt(boosted) + " coins now."
+        : newStage === 2
+          ? "A " + sp.name.toLowerCase() + " grew into a LARGE fish! It drops " + moneyFmt(boosted) + " coins now."
+          : "A " + sp.name.toLowerCase() + " grew into a MEDIUM fish! It drops " + moneyFmt(boosted) + " coins now.");
     }
     // A little bubble puff as a "yum" — cheap feedback, no particles.
     this.spawnBubble(fish.sprite.x, fish.sprite.y - 10);

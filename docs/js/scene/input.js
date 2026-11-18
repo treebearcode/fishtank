@@ -116,6 +116,24 @@ export const inputMixin = {
           }
         }
       }
+      // HOVER: hovering a fish shows its trait in the description bar
+      // ("Bold Guppy — sprints first, sprints often"), so traits are
+      // discoverable without any marker drawn on the fish. The bar is
+      // only rewritten when the hovered fish CHANGES — every pointer
+      // move rewriting it would stomp the Coin Rush countdown text
+      // (see updateEvents). Moving off a fish restores the default
+      // bar text. No hover while a fish is being dragged — the bar
+      // shows the sell hint then.
+      if (!this.dragFish) {
+        const fishPos = this.fish.map((f) => ({ x: f.sprite.x, y: f.sprite.y }));
+        const hit = resolvePointerTarget(pointer.x, pointer.y, [], fishPos);
+        const hovered = hit.type === "fish" ? this.fish[hit.index] : null;
+        if (hovered !== this._hoverFish) {
+          this._hoverFish = hovered;
+          if (hovered) this.showDescText(this.fishTraitLine(hovered));
+          else this.resetDescText();
+        }
+      }
     }
     if (!this.dragFish) return;
     const dx = pointer.x - this.dragStartX, dy = pointer.y - this.dragStartY;

@@ -5,8 +5,8 @@
 // FUTURE SWAP: to use real art (e.g. the Kenney Fish Pack, CC0 — see
 // CREDITS.md), drop the PNGs in src/assets/ and replace these makers
 // with this.load.image() calls in preload(). The fish code only ever
-// refers to the texture keys 'fish-body-<species>-<stage>' and
-// 'fish-tail-<species>-<stage>'.
+// refers to the texture keys 'fish-body-<species>-<stage>-<pattern>'
+// and 'fish-tail-<species>-<stage>'.
 //
 // The fish is TWO textures, not one: a single flat fish image cannot
 // wiggle its tail — rotating the whole sprite just rocks the fish. So
@@ -23,11 +23,68 @@
 
 import { speciesDef, COIN_COLORS } from "./config.js";
 
-export function makeFishBodyTexture(scene, stage, speciesKey) {
+// Darken a hex colour by factor f (0-1) — pattern overlays are a
+// darker shade of the body colour, so they read as markings, not new
+// colours.
+function shade(hex, f) {
+  const r = Math.round(((hex >> 16) & 0xff) * f);
+  const g = Math.round(((hex >> 8) & 0xff) * f);
+  const b = Math.round((hex & 0xff) * f);
+  return (r << 16) | (g << 8) | b;
+}
+
+// PATTERN OVERLAY: drawn on top of the base body, before the eye, so
+// markings never cover the face. All shapes stay inside the body
+// silhouette by construction — stripes are chord-height bars, spots
+// are small circles well inside the ellipse, the gradient is a small
+// ellipse in the body's upper middle. Subtle on purpose (shade 0.72):
+// a striped guppy is still obviously a guppy.
+function drawBodyPattern(g, pattern, speciesKey, color) {
+  if (!pattern || pattern === "plain") return;
+  const dark = shade(color, 0.72);
+  if (speciesKey === "starfish") {
+    // The star's solid centre only — short bars and dots near it.
+    if (pattern === "stripes") {
+      g.fillStyle(dark, 1);
+      for (const x of [28, 32, 36]) g.fillRect(x - 1.5, 15, 3, 10);
+    } else if (pattern === "spots") {
+      g.fillStyle(dark, 1);
+      g.fillCircle(28, 17, 2); g.fillCircle(36, 17, 2); g.fillCircle(32, 24, 2);
+    } else if (pattern === "gradient") {
+      g.fillStyle(dark, 0.6);
+      g.fillCircle(32, 20, 7);
+    }
+    return;
+  }
+  if (pattern === "stripes") {
+    // Vertical bars at x=24/32/40, heights = the body ellipse's chord
+    // at that x (minus a hair), so no bar pokes past the silhouette.
+    g.fillStyle(dark, 1);
+    for (const x of [24, 32, 40]) {
+      const d = Math.abs(x - 32) / 20;
+      const h = 2 * 13 * Math.sqrt(1 - d * d) - 2;
+      g.fillRect(x - 2, 20 - h / 2, 4, h);
+    }
+  } else if (pattern === "spots") {
+    g.fillStyle(dark, 1);
+    g.fillCircle(24, 16, 2.5); g.fillCircle(36, 24, 2.5);
+    g.fillCircle(40, 15, 2.5); g.fillCircle(26, 25, 2.5);
+  } else if (pattern === "gradient") {
+    // Darker upper body — a small ellipse in the body's upper middle,
+    // sized to stay inside the silhouette.
+    g.fillStyle(dark, 0.6);
+    g.fillEllipse(32, 15, 24, 9);
+  }
+}
+
+export function makeFishBodyTexture(scene, stage, speciesKey, pattern) {
   const sp = speciesDef(speciesKey);
-  const key = "fish-body-" + sp.key + "-" + stage;
+  const pat = pattern || "plain";
+  const key = "fish-body-" + sp.key + "-" + stage + "-" + pat;
   if (scene.textures.exists(key)) return key;
-  const color = sp.colors[stage];
+  // Stage 3 (royal) reuses the large palette — the crown and the
+  // 1.35x scale are what mark a royal, not a new body colour.
+  const color = sp.colors[Math.min(stage, 2)];
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
   const w = 64, h = 40;
   if (sp.key === "starfish") {
@@ -50,6 +107,7 @@ export function makeFishBodyTexture(scene, stage, speciesKey) {
     g.fillCircle(36, 14, 2);
     g.fillStyle(0xffffff, 0.3);
     g.fillCircle(32, 24, 4);
+    drawBodyPattern(g, pat, sp.key, color);
     // Small white dots on the star arms, so the arms read at a glance.
     g.fillStyle(0xffffff, 0.9);
     for (let i = 0; i < 5; i++) {
@@ -74,6 +132,7 @@ export function makeFishBodyTexture(scene, stage, speciesKey) {
     // Bright belly highlight.
     g.fillStyle(0xffffff, 0.25);
     g.fillEllipse(32, h / 2 + 6, 28, 8);
+    drawBodyPattern(g, pat, sp.key, color);
     // Jagged flame dorsal fin (zigzag, not a smooth triangle).
     g.fillStyle(color, 1);
     g.fillPoints([
@@ -100,6 +159,7 @@ export function makeFishBodyTexture(scene, stage, speciesKey) {
     // Belly highlight.
     g.fillStyle(0xffffff, 0.25);
     g.fillEllipse(32, h / 2 + 6, 30, 10);
+    drawBodyPattern(g, pat, sp.key, color);
     // Spiky dorsal fin (zigzag).
     g.fillStyle(color, 1);
     g.fillPoints([
@@ -129,6 +189,7 @@ export function makeFishBodyTexture(scene, stage, speciesKey) {
   // Belly highlight.
   g.fillStyle(0xffffff, 0.25);
   g.fillEllipse(32, h / 2 + 6, 30, 10);
+  drawBodyPattern(g, pat, sp.key, color);
   // Dorsal fin.
   g.fillStyle(color, 1);
   g.fillTriangle(26, 8, 38, 8, 32, 0);
@@ -181,7 +242,8 @@ export function makeFishTailTexture(scene, stage, speciesKey) {
   const sp = speciesDef(speciesKey);
   const key = "fish-tail-" + sp.key + "-" + stage;
   if (scene.textures.exists(key)) return key;
-  const color = sp.colors[stage];
+  // Stage 3 (royal) reuses the large tail colour, like the body.
+  const color = sp.colors[Math.min(stage, 2)];
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
   const tg = tailGeometryFor(sp.key);
   g.fillStyle(color, 1);
@@ -594,6 +656,83 @@ export function makeJellyBurstTexture(scene) {
   g.fillStyle(0xfff3b0, 1);
   g.fillCircle(cx, cy, 20);
   g.generateTexture(key, 260, 260);
+  g.destroy();
+  return key;
+}
+
+// HATS — small cosmetic sprites worn above a fish's head, 24x16 each,
+// origin (0.5, 1) at runtime (the bottom centre sits on the head).
+// Six random kinds (~20% of fish spawn wearing one) plus the CROWN,
+// which is never rolled — crowns mean royal only (see setFishStageVisual).
+// All are drawn facing right and mostly symmetric, so flipX mirrors
+// them correctly on a left-facing fish, exactly like the body.
+export function makeHatTexture(scene, kind) {
+  const key = "hat-" + kind;
+  if (scene.textures.exists(key)) return key;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  if (kind === "party") {
+    // Cone party hat, pink with a yellow band and a white pompom.
+    g.fillStyle(0xff6b9d, 1);
+    g.fillTriangle(12, 1, 4, 16, 20, 16);
+    g.fillStyle(0xffd23f, 1);
+    g.fillRect(6, 12, 12, 3);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(12, 2, 2.5);
+  } else if (kind === "tophat") {
+    // Black top hat with a red band and a wide brim.
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillRect(2, 12, 20, 3);
+    g.fillRect(7, 2, 10, 11);
+    g.fillStyle(0xc0392b, 1);
+    g.fillRect(7, 9, 10, 3);
+  } else if (kind === "beanie") {
+    // Teal beanie dome with a darker brim and a white pompom.
+    g.fillStyle(0x2a9d8f, 1);
+    g.fillCircle(12, 12, 8);
+    g.fillStyle(0x1f7a6e, 1);
+    g.fillRect(4, 12, 16, 4);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(12, 3, 2.5);
+  } else if (kind === "pirate") {
+    // Black tricorn with a tiny white skull on the front.
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillTriangle(2, 14, 12, 2, 22, 14);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(12, 10, 2.5);
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillCircle(11, 10, 0.8);
+    g.fillCircle(13, 10, 0.8);
+  } else if (kind === "flower") {
+    // A daisy: five white petals around a yellow centre.
+    g.fillStyle(0xffffff, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      g.fillCircle(12 + Math.cos(a) * 4.5, 8 + Math.sin(a) * 4.5, 3);
+    }
+    g.fillStyle(0xffd23f, 1);
+    g.fillCircle(12, 8, 2.5);
+  } else if (kind === "bow") {
+    // Pink bow: two triangles and a knot.
+    g.fillStyle(0xe85d75, 1);
+    g.fillTriangle(2, 6, 2, 14, 11, 10);
+    g.fillTriangle(22, 6, 22, 14, 13, 10);
+    g.fillStyle(0xc23a54, 1);
+    g.fillCircle(12, 10, 2.5);
+  } else if (kind === "crown") {
+    // Gold crown, three points with red and blue jewels. Royal only.
+    g.fillStyle(0xffd23f, 1);
+    g.fillPoints([
+      { x: 3, y: 15 }, { x: 3, y: 7 }, { x: 7, y: 11 },
+      { x: 12, y: 3 }, { x: 17, y: 11 }, { x: 21, y: 7 }, { x: 21, y: 15 },
+    ], true);
+    g.fillStyle(0xe85d75, 1);
+    g.fillCircle(8, 12, 1.5);
+    g.fillStyle(0x5a8de8, 1);
+    g.fillCircle(16, 12, 1.5);
+    g.fillStyle(0xe85d75, 1);
+    g.fillCircle(12, 11, 1.5);
+  }
+  g.generateTexture(key, 24, 16);
   g.destroy();
   return key;
 }

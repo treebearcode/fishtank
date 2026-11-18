@@ -449,31 +449,37 @@ test("scene: startGame() spawns the 2 starting guppies", () => {
   eq(s.fish.length, 2);
   assert(s.fish.every((f) => f.species === "guppy"), "start fish are guppies");
 });
-test("scene: textures exist per species/stage; starfish has no tail texture", () => {
+test("scene: textures exist per species/stage/pattern; starfish has no tail texture", () => {
   const s = makeScene();
   const gen = s._stubs.generated;
   for (const key of ["guppy", "emberfin", "chomper", "starfish"]) {
-    for (let st = 0; st < 3; st++) {
-      assert(gen.includes("fish-body-" + key + "-" + st), "missing body " + key + "-" + st);
+    for (let st = 0; st < 4; st++) {
+      for (const pat of ["plain", "stripes", "spots", "gradient"]) {
+        assert(gen.includes("fish-body-" + key + "-" + st + "-" + pat), "missing body " + key + "-" + st + "-" + pat);
+      }
     }
   }
   assert(gen.includes("fish-tail-emberfin-1"), "emberfin tail exists");
   assert(gen.includes("fish-tail-chomper-2"), "chomper tail exists");
+  assert(gen.includes("fish-tail-guppy-3"), "stage-3 (royal) tail exists");
   assert(!gen.some((k) => k.indexOf("fish-tail-starfish") === 0), "starfish must have NO tail texture");
   assert(gen.includes("feeder-bot") && gen.includes("bot-light") && gen.includes("egg"), "bot + egg textures");
+  for (const kind of ["party", "tophat", "beanie", "pirate", "flower", "bow", "crown"]) {
+    assert(gen.includes("hat-" + kind), "missing hat texture " + kind);
+  }
 });
 test("scene: spawnFish species fields (speed, tail, texture)", () => {
   const s = makeScene();
   const e = s.spawnFish(400, 200, "emberfin");
   eq(e.species, "emberfin"); eq(e.speed, 65);
   assert(e.tail !== null, "emberfin has a tail");
-  eq(e.sprite.texture, "fish-body-emberfin-0");
+  assert(e.sprite.texture === "fish-body-emberfin-0-" + e.pattern, "emberfin body texture carries its pattern, got " + e.sprite.texture);
   const c = s.spawnFish(400, 300, "chomper");
   eq(c.speed, 30);
   const st = s.spawnFish(400, 350, "starfish");
   eq(st.species, "starfish"); eq(st.speed, 25);
   eq(st.tail, null, "starfish has no tail");
-  eq(st.sprite.texture, "fish-body-starfish-0");
+  assert(st.sprite.texture === "fish-body-starfish-0-" + st.pattern, "starfish body texture carries its pattern, got " + st.sprite.texture);
 });
 test("scene: starfish animates without a tail (no throw, body still bobs/tilts)", () => {
   const s = makeScene();
@@ -1025,9 +1031,10 @@ test("V4.1: species size multipliers (Chomper 1.3x, Starfish 0.95x)", () => {
   eq(G.speciesSize("starfish"), 0.95);
 });
 test("V4.1: fishScale — baby ~half an adult, Chomper biggest", () => {
-  eq(JSON.stringify(G.GROWTH_SCALES), JSON.stringify([0.6, 0.9, 1.2]));
+  eq(JSON.stringify(G.GROWTH_SCALES), JSON.stringify([0.6, 0.9, 1.2, 1.35]));
   approx(G.fishScale(0, "guppy"), 0.6);
   approx(G.fishScale(2, "guppy"), 1.2);
+  approx(G.fishScale(3, "guppy"), 1.35, 1e-9, "royal is a touch bigger than large");
   approx(G.fishScale(0, "guppy") / G.fishScale(2, "guppy"), 0.5, 1e-9, "baby is exactly half an adult");
   approx(G.fishScale(1, "guppy"), 0.9);
   approx(G.fishScale(2, "chomper"), 1.56, 1e-9, "large Chomper is biggest");
@@ -1145,6 +1152,8 @@ function largeHungryChomper(scene, x, y) {
   const c = scene.spawnFish(x, y, "chomper");
   c.feeds = 8; c.stage = 2; scene.setFishStageVisual(c);
   c.hungerSec = 5; c.lastFedSec = 5;
+  c.royalGene = false; // pin the gene off: a royal hunter would grow
+  // to stage 3 on the eat, and these tests assert stage 2
   return c;
 }
 function stillBaby(scene, species, x, y) {
@@ -1813,7 +1822,7 @@ function killFish(scene, fish) {
   step(scene, 0.2, () => keepFed(scene));
 }
 function clearLiveFish(scene) {
-  for (const f of [...scene.fish]) { f.sprite.destroy(); if (f.tail) f.tail.destroy(); }
+  for (const f of [...scene.fish]) { f.sprite.destroy(); if (f.tail) f.tail.destroy(); if (f.hat) f.hat.destroy(); }
   scene.fish = [];
 }
 test("dead fish: starving spawns one — live fish removed, dead fish present, belly-up", () => {
@@ -2372,6 +2381,10 @@ function sprintScene() {
   }
   const f = s.spawnFish(480, 150, "guppy");
   f.tempo = 1;
+  // Pin the trait to Social — the neutral one (no chase, sprint, or
+  // tempo effect) — so these sprint tests never flake on a random
+  // Bold roll (Bold sprints from 30px, and its cooldown is 1.5s).
+  f.trait = "social";
   f.hungerSec = 10; f.lastFedSec = 10;
   f.targetX = 480; f.targetY = 150; f.wanderTimer = 100;
   return { scene: s, fish: f };
@@ -2494,6 +2507,9 @@ test("speeds: a sprinting starfish is still slow in absolute terms", () => {
   clearLiveFish(s);
   const st = s.spawnFish(200, 350, "starfish");
   st.tempo = 1;
+  // Pin the trait to Social (neutral chase speed) — a Greedy
+  // starfish would outswim the 22.5px expectation by 1.15x.
+  st.trait = "social";
   st.hungerSec = 10; st.lastFedSec = 10;
   st.targetX = 200; st.targetY = 350; st.wanderTimer = 100;
   s.dropPelletAt(280, 350, 1, false);
@@ -2884,6 +2900,363 @@ test("uncap: resetTank turns the toggle back OFF", () => {
   s.resetTank();
   eq(s.uncapFish, false, "reset clears it");
   eq(s.maxFishCap(), 16, "cap back to 16");
+});
+
+// ===========================================================================
+// 17. FISH TRAITS, PATTERNS, HATS, AND THE ROYAL GENE
+// ===========================================================================
+test("traits: tuning constants are the agreed numbers", () => {
+  const C = G.CONFIG;
+  eq(C.greedyChaseMult, 1.15); eq(C.greedyChewSec, 1.0);
+  eq(C.shyFleeMult, 1.5); eq(C.shyChaseMult, 0.9); eq(C.shySprintCooldownSec, 5);
+  eq(C.boldSprintCooldownSec, 1.5); eq(C.boldSprintMinPx, 30); eq(C.boldSprintMaxPx, 150);
+  eq(C.lazyChaseMult, 0.9); eq(C.lazyTempoMax, 1.0); eq(C.socialRangePx, 200);
+  eq(C.hatChance, 0.2);
+  eq(C.royalGeneChance, 0.05); eq(C.royalFeedsAfterLarge, 3); eq(C.royalScale, 1.35);
+  eq(C.royalCoinMult, 2); eq(C.royalSellMult, 2);
+  eq(C.royalGeneInheritOne, 0.5); eq(C.royalGeneInheritBoth, 0.75);
+  eq(JSON.stringify(G.TRAITS), JSON.stringify(["greedy", "shy", "bold", "lazy", "social"]));
+  eq(JSON.stringify(G.PATTERNS), JSON.stringify(["plain", "stripes", "spots", "gradient"]));
+  eq(JSON.stringify(G.HATS), JSON.stringify(["party", "tophat", "beanie", "pirate", "flower", "bow"]));
+});
+test("traits: all five appear at spawn, roughly uniform", () => {
+  const s = makeScene();
+  const counts = {};
+  for (let i = 0; i < 500; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy");
+    counts[f.trait] = (counts[f.trait] || 0) + 1;
+  }
+  for (const t of G.TRAITS) {
+    assert(counts[t] > 60 && counts[t] < 140, "trait " + t + " count " + counts[t] + "/500");
+  }
+});
+test("traits: Greedy chews a plant in 1.0s, other traits take 1.5s", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const g = s.spawnFish(480, 200, "guppy", { trait: "greedy" });
+  const n = s.spawnFish(480, 300, "guppy", { trait: "bold" });
+  const p = s.spawnFeastPlant(480, 200);
+  s.nibblePlant(g, p);
+  eq(g.plantChewSec, 1.0, "greedy chew");
+  const q = s.spawnFeastPlant(480, 300);
+  s.nibblePlant(n, q);
+  eq(n.plantChewSec, 1.5, "normal chew");
+});
+test("traits: Shy fish flinches 1.5x farther on a poke", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const shy = s.spawnFish(480, 200, "guppy", { trait: "shy" });
+  const calm = s.spawnFish(480, 300, "guppy", { trait: "bold" });
+  for (const f of [shy, calm]) {
+    f.pokeSec = 0.5; f.pokeDirX = 1; f.pokeDirY = 0;
+    f.targetX = f.sprite.x; f.targetY = f.sprite.y; f.wanderTimer = 100;
+    f.hungerSec = 10; f.lastFedSec = 10;
+  }
+  step(s, 0.1);
+  approx(shy.sprite.x - 480, 45 * 3 * 1.5 * 0.1, 1e-9, "shy dart");
+  approx(calm.sprite.x - 480, 45 * 3 * 0.1, 1e-9, "normal dart");
+});
+test("traits: Bold sprints from 30-150px and recovers in 1.5s; Shy needs 5s", () => {
+  const s = makeScene();
+  const b = s.spawnFish(480, 200, "guppy", { trait: "bold" });
+  const y = s.spawnFish(480, 300, "guppy", { trait: "shy" });
+  const n = s.spawnFish(480, 350, "guppy", { trait: "lazy" });
+  eq(JSON.stringify(s.sprintWindowFor(b)), JSON.stringify({ min: 30, max: 150 }), "bold window");
+  eq(JSON.stringify(s.sprintWindowFor(y)), JSON.stringify({ min: 40, max: 120 }), "shy window is the normal one");
+  eq(s.sprintCooldownFor(b), 1.5, "bold cooldown");
+  eq(s.sprintCooldownFor(y), 5, "shy cooldown");
+  eq(s.sprintCooldownFor(n), 3, "normal cooldown");
+});
+test("traits: a Bold fish sprints for a pellet 140px away (outside the normal window)", () => {
+  const { scene: s, fish: f } = sprintScene();
+  f.trait = "bold";
+  s.dropPelletAt(480 + 140, 150, 1, false);
+  step(s, 0.1);
+  assert(f.sprintSec > 0, "bold sprint started at 140px, sprintSec=" + f.sprintSec);
+});
+test("traits: a non-Bold fish does NOT sprint for a pellet 140px away", () => {
+  const { scene: s, fish: f } = sprintScene();
+  f.trait = "lazy";
+  s.dropPelletAt(480 + 140, 150, 1, false);
+  step(s, 0.1);
+  eq(f.sprintSec, 0, "140px is outside the normal 40-120 window");
+});
+test("traits: Lazy fish roll tempo in [0.85, 1.0], never zippy", () => {
+  const s = makeScene();
+  for (let i = 0; i < 200; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy", { trait: "lazy" });
+    assert(f.tempo >= 0.85 && f.tempo <= 1.0, "lazy tempo " + f.tempo + " out of [0.85, 1.0]");
+  }
+  // And a random batch can be zippy — the cap is the trait, not the species.
+  let zippy = 0;
+  for (let i = 0; i < 200; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy");
+    if (f.tempo > 1.0) zippy++;
+  }
+  assert(zippy > 0, "200 random guppies should include a zippy one");
+});
+test("traits: a Social fish wanders toward the nearest fish within 200px", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const a = s.spawnFish(400, 300, "guppy", { trait: "social" });
+  const b = s.spawnFish(500, 300, "guppy");
+  a.wanderTimer = 0; a.targetX = 400; a.targetY = 300;
+  a.hungerSec = 10; a.lastFedSec = 10;
+  b.wanderTimer = 100; b.targetX = 500; b.targetY = 300;
+  b.hungerSec = 10; b.lastFedSec = 10;
+  step(s, 0.1);
+  eq(a.targetX, 500, "social target is the friend's x");
+  eq(a.targetY, 300, "social target is the friend's y");
+});
+test("traits: a Social fish with nobody nearby wanders randomly", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const a = s.spawnFish(400, 300, "guppy", { trait: "social" });
+  a.wanderTimer = 0;
+  a.hungerSec = 10; a.lastFedSec = 10;
+  step(s, 0.1);
+  assert(a.targetX >= 60 && a.targetX <= 900, "random wander x in range, got " + a.targetX);
+  assert(a.targetY >= 100 && a.targetY <= 360, "random wander y in range, got " + a.targetY);
+});
+test("traits: babies inherit a parent's trait 50% of the time", () => {
+  let inherited = 0;
+  const n = 2000;
+  for (let i = 0; i < n; i++) {
+    const t = G.inheritTrait("bold", "lazy");
+    if (t === "bold" || t === "lazy") inherited++;
+  }
+  // 50% inherit (bold or lazy) + 50% fresh roll (bold/lazy 2/5 of
+  // those) = 70% bold-or-lazy overall.
+  assert(inherited > n * 0.6 && inherited < n * 0.8, "inherited " + inherited + "/" + n);
+});
+test("traits: eggs inherit a parent's trait at the same 50% rate", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const mum = s.spawnFish(480, 200, "guppy", { trait: "bold", royalGene: false });
+  const dad = s.spawnFish(520, 200, "guppy", { trait: "lazy", royalGene: false });
+  let inherited = 0;
+  const n = 200;
+  for (let i = 0; i < n; i++) {
+    mum.breedPartner = dad; dad.breedPartner = mum;
+    s.layEgg(mum);
+    const egg = s.eggs[s.eggs.length - 1];
+    if (egg.trait === "bold" || egg.trait === "lazy") inherited++;
+  }
+  assert(inherited > n * 0.55 && inherited < n * 0.85, "egg inherited " + inherited + "/" + n);
+});
+test("patterns: all four appear at spawn, and species colours stay distinct", () => {
+  const s = makeScene();
+  const seen = {};
+  for (let i = 0; i < 200; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy");
+    seen[f.pattern] = true;
+    eq(f.sprite.texture, "fish-body-guppy-0-" + f.pattern, "body texture carries the pattern");
+  }
+  for (const pat of G.PATTERNS) assert(seen[pat], "pattern " + pat + " never appeared");
+  // Species colours: the stage-0 body colour of each species differs
+  // from every other — a pattern never makes a guppy look like an emberfin.
+  const keys = Object.keys(G.SPECIES);
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      assert(G.SPECIES[keys[i]].colors[0] !== G.SPECIES[keys[j]].colors[0],
+        keys[i] + " and " + keys[j] + " share a stage-0 colour");
+    }
+  }
+});
+test("hats: ~20% of fish spawn wearing one, all six kinds appear, never a crown", () => {
+  const s = makeScene();
+  let hatted = 0;
+  const kinds = {};
+  for (let i = 0; i < 1000; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy");
+    if (f.hatKind) {
+      hatted++;
+      kinds[f.hatKind] = true;
+      assert(f.hatKind !== "crown", "a crown spawned on a normal fish");
+      assert(f.hat !== null, "a hatted fish has a hat sprite");
+    } else {
+      assert(f.hat === null, "an unhatted fish has no hat sprite");
+    }
+  }
+  assert(hatted > 120 && hatted < 280, "hatted " + hatted + "/1000");
+  for (const kind of G.HATS) assert(kinds[kind], "hat kind " + kind + " never appeared");
+});
+test("hats: the hat follows the body's facing (rot180) and rotation", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  // Spawn until one wears a hat (20% chance — a handful of tries).
+  let f = null;
+  for (let i = 0; i < 50 && !f; i++) {
+    const c = s.spawnFish(480, 300, "guppy");
+    if (c.hat) f = c;
+    else { c.sprite.destroy(); if (c.tail) c.tail.destroy(); s.fish.splice(s.fish.indexOf(c), 1); }
+  }
+  assert(f !== null, "no hatted fish in 50 spawns");
+  f.sprite.rotation = 0;
+  f.sprite.setFlipX(false);
+  s.animateFish(f, 0.016);
+  assert(f.hat.x > f.sprite.x, "facing right: hat is on the head side, hat.x=" + f.hat.x);
+  eq(f.hat.flipX, false, "hat not flipped when facing right");
+  f.sprite.setFlipX(true);
+  s.animateFish(f, 0.016);
+  assert(f.hat.x < f.sprite.x, "facing left: hat mirrors to the head side, hat.x=" + f.hat.x);
+  eq(f.hat.flipX, true, "hat flips with the body");
+  // Rotation: animateFish drives the body rotation from the fish's
+  // tilt, and the hat must ride that same rotation — so tilt the
+  // fish and check the hat matches the body's final rotation.
+  f.tilt = 0.4;
+  s.animateFish(f, 0.016);
+  approx(f.sprite.rotation, 0.4, 1e-9, "body rotation follows tilt");
+  approx(f.hat.rotation, f.sprite.rotation, 1e-9, "hat rotates with the body");
+});
+test("hats: a starfish can wear a hat — it sits centred, no throw", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  let f = null;
+  for (let i = 0; i < 50 && !f; i++) {
+    const c = s.spawnFish(480, 300, "starfish");
+    if (c.hat) f = c;
+    else { c.sprite.destroy(); s.fish.splice(s.fish.indexOf(c), 1); }
+  }
+  assert(f !== null, "no hatted starfish in 50 spawns");
+  f.sprite.rotation = 0;
+  s.animateFish(f, 0.016);
+  approx(f.hat.x, f.sprite.x, 1e-9, "starfish hat is centred");
+  assert(f.hat.y < f.sprite.y, "starfish hat sits above the body");
+});
+test("royalty: a merely-large fish never gets a crown", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 200, "guppy", { royalGene: false });
+  for (let i = 0; i < 6; i++) s.applyFeed(f, 1, 480, 200);
+  eq(f.stage, 2, "6 feeds = large");
+  assert(f.hatKind !== "crown", "large non-gene fish has no crown, hatKind=" + f.hatKind);
+  if (f.hat) assert(f.hat.texture !== "hat-crown", "large fish wears no crown texture");
+});
+test("royalty: turning royal replaces the hat with the crown", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  // A royal-gene fish that already wears a hat.
+  let f = null;
+  for (let i = 0; i < 50 && !f; i++) {
+    const c = s.spawnFish(480, 200, "guppy", { royalGene: true });
+    if (c.hat) f = c;
+    else { c.sprite.destroy(); if (c.tail) c.tail.destroy(); s.fish.splice(s.fish.indexOf(c), 1); }
+  }
+  assert(f !== null, "no hatted royal-gene fish in 50 spawns");
+  const oldHat = f.hat;
+  for (let i = 0; i < 9; i++) s.applyFeed(f, 1, 480, 200);
+  eq(f.stage, 3, "9 feeds = royal for a gene carrier");
+  eq(f.hatKind, "crown", "royal wears a crown");
+  eq(f.hat.texture, "hat-crown", "crown texture");
+  assert(oldHat.destroyed, "the old hat was destroyed, not left floating");
+  assert(f.hat !== oldHat, "a new crown sprite replaced the hat");
+  // Growing further (or re-rendering) does not stack crowns.
+  const crown = f.hat;
+  s.setFishStageVisual(f);
+  eq(f.hat, crown, "no second crown on re-render");
+});
+test("royalty: only gene carriers grow past large (stage 3 at +3 feeds)", () => {
+  eq(G.stageForFeeds(8, "guppy", false), 2, "8 feeds, no gene: large");
+  eq(G.stageForFeeds(9, "guppy", false), 2, "9 feeds, no gene: still large");
+  eq(G.stageForFeeds(100, "guppy", false), 2, "100 feeds, no gene: still large");
+  eq(G.stageForFeeds(9, "guppy", true), 3, "9 feeds + gene: royal");
+  eq(G.stageForFeeds(10, "chomper", true), 2, "chomper needs 11 (8 + 3)");
+  eq(G.stageForFeeds(11, "chomper", true), 3, "11 feeds + gene: royal chomper");
+  eq(G.stageForFeeds(11, "chomper", false), 2, "11 feeds, no gene: large chomper");
+  eq(G.stageForFeeds(9, "emberfin", true), 3, "emberfin royal at 9");
+  eq(G.stageForFeeds(9, "starfish", true), 3, "starfish royal at 9");
+  // End to end: a non-gene guppy fed 9 times stays large.
+  const s = makeScene();
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 200, "guppy", { royalGene: false });
+  for (let i = 0; i < 9; i++) s.applyFeed(f, 1, 480, 200);
+  eq(f.stage, 2, "fed 9x, no gene: large, not royal");
+  const r = s.spawnFish(480, 300, "guppy", { royalGene: true });
+  for (let i = 0; i < 9; i++) s.applyFeed(r, 1, 480, 300);
+  eq(r.stage, 3, "fed 9x, gene: royal");
+  approx(r.baseScale, 1.35, 1e-9, "royal scale 1.35x");
+});
+test("royalty: royal coins and sell prices are 2x large", () => {
+  eq(G.coinValueForStage(3, "guppy"), 20, "royal guppy coin");
+  eq(G.coinValueForStage(3, "emberfin"), 18, "royal emberfin coin");
+  eq(G.coinValueForStage(3, "chomper"), 40, "royal chomper coin");
+  eq(G.coinValueForStage(3, "starfish"), 24, "royal starfish coin");
+  eq(G.sellPriceForStage(3, "guppy"), 300, "royal guppy sell");
+  eq(G.sellPriceForStage(3, "emberfin"), 600, "royal emberfin sell");
+  eq(G.sellPriceForStage(3, "chomper"), 1000, "royal chomper sell");
+  eq(G.sellPriceForStage(3, "starfish"), 700, "royal starfish sell");
+  // And large is unchanged.
+  eq(G.coinValueForStage(2, "guppy"), 10, "large guppy coin unchanged");
+  eq(G.sellPriceForStage(2, "chomper"), 500, "large chomper sell unchanged");
+});
+test("royalty: a royal fish counts as large for the goal", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  for (let i = 0; i < 3; i++) {
+    const f = s.spawnFish(200 + i * 200, 200, "guppy", { royalGene: true });
+    f.stage = 3; s.setFishStageVisual(f);
+  }
+  eq(G.countLargeFish(s.fish), 3, "3 royals count as 3 large");
+  assert(G.goalIsMet(1000, G.countLargeFish(s.fish)), "goal met with 3 royals");
+  // Mixed: 2 royals + 1 large = 3.
+  const s2 = makeScene();
+  clearLiveFish(s2);
+  for (let i = 0; i < 2; i++) {
+    const f = s2.spawnFish(200 + i * 200, 200, "guppy", { royalGene: true });
+    f.stage = 3; s2.setFishStageVisual(f);
+  }
+  const l = s2.spawnFish(600, 200, "guppy");
+  l.stage = 2; s2.setFishStageVisual(l);
+  eq(G.countLargeFish(s2.fish), 3, "2 royals + 1 large = 3");
+});
+test("royalty: a royal Chomper still hunts, and royal fish still breed", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const h = s.spawnFish(480, 200, "chomper", { royalGene: true });
+  h.stage = 3; s.setFishStageVisual(h); h.hungerSec = 30; h.lastFedSec = 30;
+  const b = s.spawnFish(500, 200, "guppy");
+  assert(G.canHunt(h, b), "royal chomper hunts");
+  const s2 = makeScene();
+  clearLiveFish(s2);
+  const a = s2.spawnFish(400, 200, "guppy", { royalGene: true });
+  const c = s2.spawnFish(500, 200, "guppy", { royalGene: true });
+  for (const f of [a, c]) { f.stage = 3; s2.setFishStageVisual(f); f.hungerSec = 5; f.lastFedSec = 5; }
+  assert(G.canBreed(a, c, 2, 16), "two royals can breed");
+});
+test("royalty: the gene inherits 50% (one royal parent), 75% (two), 5% base", () => {
+  const n = 2000;
+  let one = 0, both = 0, base = 0;
+  for (let i = 0; i < n; i++) {
+    if (G.inheritRoyalGene(true, false)) one++;
+    if (G.inheritRoyalGene(true, true)) both++;
+    if (G.inheritRoyalGene(false, false)) base++;
+  }
+  assert(one > n * 0.42 && one < n * 0.58, "one parent: " + one + "/" + n);
+  assert(both > n * 0.67 && both < n * 0.83, "two parents: " + both + "/" + n);
+  assert(base > n * 0.02 && base < n * 0.09, "base: " + base + "/" + n);
+});
+test("royalty: ~5% of fish are born carrying the gene", () => {
+  const s = makeScene();
+  let carriers = 0;
+  for (let i = 0; i < 2000; i++) {
+    const f = s.spawnFish(100 + (i % 40) * 20, 150 + Math.floor(i / 40) * 40, "guppy");
+    if (f.royalGene) carriers++;
+  }
+  assert(carriers > 60 && carriers < 150, "carriers " + carriers + "/2000");
+});
+test("traits: hovering a fish shows its trait in the description bar", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  const f = s.spawnFish(480, 300, "guppy", { trait: "bold" });
+  eq(s.fishTraitLine(f), "Bold Guppy — sprints first, sprints often", "trait line");
+  s.onPointerMove({ x: 480, y: 300 });
+  eq(s.descBarText.text, "Bold Guppy — sprints first, sprints often", "hover shows the trait");
+  s.onPointerMove({ x: 100, y: 100 });
+  eq(s.descBarText.text, G.DESC_DEFAULT_TEXT, "moving off restores the default text");
+  // Royal fish are named as such, with the double-coin note.
+  f.stage = 3; s.setFishStageVisual(f);
+  eq(s.fishTraitLine(f), "Royal Bold Guppy — sprints first, sprints often · drops double coins", "royal trait line");
 });
 
 // ===========================================================================

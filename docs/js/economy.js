@@ -6,29 +6,37 @@ import { CONFIG, speciesDef } from "./config.js";
 
 // How many feeds make which stage? 0-2 feeds = small, then the species'
 // own thresholds (guppy 3/6, Chomper 4/8). `speciesKey` is optional and
-// defaults to the guppy, so old callers keep working.
-export function stageForFeeds(feeds, speciesKey) {
+// defaults to the guppy, so old callers keep working. Stage 3 is
+// ROYAL: only a fish carrying the royal gene can reach it, at
+// feedsToLarge + 3 — a non-gene fish caps at large no matter how much
+// it eats (royalGene defaults to false).
+export function stageForFeeds(feeds, speciesKey, royalGene) {
   const sp = speciesDef(speciesKey);
+  if (royalGene && feeds >= sp.feedsToLarge + CONFIG.royalFeedsAfterLarge) return 3;
   if (feeds >= sp.feedsToLarge) return 2;
   if (feeds >= sp.feedsToMedium) return 1;
   return 0;
 }
 
 // RENDERED SIZE — growth scale times species size. Growth is
-// 0.6 / 0.9 / 1.2 (baby / medium / large): a baby is ~half an adult.
-// Species size multiplies on top: a large Chomper renders at
-// 1.2 * 1.3 = 1.56, a baby Starfish at 0.6 * 0.95 = 0.57. This is
-// RENDERED size only — coin values, sell prices, and feeds-to-grow do
-// NOT change with it.
-export const GROWTH_SCALES = [0.6, 0.9, 1.2];
+// 0.6 / 0.9 / 1.2 / 1.35 (baby / medium / large / royal): a baby is
+// ~half an adult, a royal is a touch bigger than a large. Species size
+// multiplies on top: a large Chomper renders at 1.2 * 1.3 = 1.56, a
+// baby Starfish at 0.6 * 0.95 = 0.57. This is RENDERED size only —
+// coin values, sell prices, and feeds-to-grow do NOT change with it.
+export const GROWTH_SCALES = [0.6, 0.9, 1.2, 1.35];
 export function speciesSize(speciesKey) { return speciesDef(speciesKey).size || 1; }
 export function fishScale(stage, speciesKey) {
   return GROWTH_SCALES[stage] * speciesSize(speciesKey);
 }
 
 // Coin base value by growth stage (before the decoration bonus).
+// Stage 3 (royal) pays 2x the large coin value — same interval as
+// large, just a fatter coin.
 export function coinValueForStage(stage, speciesKey) {
-  return (speciesDef(speciesKey).coinValues[stage] || 1);
+  const sp = speciesDef(speciesKey);
+  if (stage >= 3) return sp.coinValues[2] * CONFIG.royalCoinMult;
+  return (sp.coinValues[stage] || 1);
 }
 
 export function isHungry(secondsSinceFed) { return secondsSinceFed >= CONFIG.hungryAfterSec; }
@@ -70,8 +78,13 @@ export function goalIsMet(totalBanked, largeCount) {
   return totalBanked >= CONFIG.goalBankTarget && largeCount >= CONFIG.goalLargeTarget;
 }
 
-export function countLargeFish(fish) { return fish.filter((f) => f.stage === 2).length; }
+export function countLargeFish(fish) { return fish.filter((f) => f.stage >= 2).length; }
 
+// A royal fish sells for 2x the large price — a royal Chomper is
+// worth $1,000, the whole goal in one sale, but it is a 1-in-20 gene
+// that has to survive to 11 feeds first.
 export function sellPriceForStage(stage, speciesKey) {
-  return speciesDef(speciesKey).sellPrices[stage] || 50;
+  const sp = speciesDef(speciesKey);
+  if (stage >= 3) return sp.sellPrices[2] * CONFIG.royalSellMult;
+  return sp.sellPrices[stage] || 50;
 }

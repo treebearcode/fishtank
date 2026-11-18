@@ -91,6 +91,44 @@ export const CONFIG = {
   sprintMult: 1.8,     // burst speed multiplier
   sprintMaxSec: 1.5,   // a burst lasts at most this long
   sprintCooldownSec: 3, // ...then this long before it can sprint again
+  // FISH TRAITS: one rolled per fish at spawn (uniform among the 5).
+  // Each is a small modifier in the existing helpers — Greedy chases
+  // food faster and chews plants faster; Shy flees a poke farther,
+  // chases food slower, and sprints rarely; Bold sprints sooner and
+  // more often; Lazy rolls a low tempo and chases food slower; Social
+  // wanders toward the nearest other fish. See fishSpeed() /
+  // sprintCooldownFor() / the steering code in scene/fish.js.
+  greedyChaseMult: 1.15, // Greedy: food-chase speed
+  greedyChewSec: 1.0,    // Greedy: plant chew pause (vs 1.5s)
+  shyFleeMult: 1.5,      // Shy: poke flee speed
+  shyChaseMult: 0.9,     // Shy: food-chase speed
+  shySprintCooldownSec: 5, // Shy: sprint breather (vs 3s)
+  boldSprintCooldownSec: 1.5, // Bold: sprint breather (vs 3s)
+  boldSprintMinPx: 30,   // Bold: sprint window, wider than 40-120
+  boldSprintMaxPx: 150,
+  lazyChaseMult: 0.9,    // Lazy: food-chase speed
+  lazyTempoMax: 1.0,     // Lazy: tempo rolls 0.85-1.0, never zippy
+  socialRangePx: 200,    // Social: wanders toward a fish this close
+  // PATTERNS + HATS: visual variety, rolled at spawn. Patterns are
+  // baked into the body texture (plain / stripes / spots / gradient
+  // belly) and kept SUBTLE — a striped guppy is still obviously a
+  // guppy. Hats are small sprites above the body, cosmetic only, one
+  // max. The crown is NOT in the random set — crowns mean royal only.
+  hatChance: 0.2,        // ~1 in 5 fish spawns wearing a hat
+  // ROYAL GENE: a rare genetic tier 4. ~5% of fish are born carrying
+  // it (hidden — the fish looks normal until it turns royal). Only
+  // gene carriers can grow past large into ROYAL (stage 3, +3 feeds
+  // after large): crown, ~1.35x scale, 2x the large coin value and
+  // 2x the large sell price, and it counts as large for the goal.
+  // The gene inherits through breeding: 50% with one royal parent,
+  // 75% with two, else the 5% base roll.
+  royalGeneChance: 0.05, // base roll at spawn
+  royalFeedsAfterLarge: 3, // feeds past large to turn royal
+  royalScale: 1.35,      // growth scale at stage 3 (vs 1.2 large)
+  royalCoinMult: 2,      // royal coin = 2x the large coin value
+  royalSellMult: 2,      // royal sell price = 2x the large sell price
+  royalGeneInheritOne: 0.5,  // one royal parent
+  royalGeneInheritBoth: 0.75, // two royal parents
   coinBottomLifeSec: 10, // seconds a landed coin sits there before fading
   breedHeartsSec: 3,     // hearts animation while a pair swims together
   breedPregnantSec: 15,  // the pregnant fish carries the egg this long
@@ -165,6 +203,30 @@ export const SPECIES = {
 };
 export const SPECIES_ORDER = ["guppy", "emberfin", "chomper", "starfish"];
 export function speciesDef(key) { return SPECIES[key] || SPECIES.guppy; }
+
+// TRAITS: one rolled per fish at spawn, uniform. The one-line hover
+// descriptions are what the description bar shows when you hover a
+// fish (see fishTraitLine in scene/fish.js).
+export const TRAITS = ["greedy", "shy", "bold", "lazy", "social"];
+export const TRAIT_DESCS = {
+  greedy: "first to food, nibbles fast",
+  shy: "nervous — darts away when poked",
+  bold: "sprints first, sprints often",
+  lazy: "drifts along, eats last",
+  social: "sticks with the school",
+};
+
+// PATTERNS: baked into the body texture at spawn (see textures.js).
+// HATS: small cosmetic sprites above the body (~20% of fish). The
+// crown is deliberately NOT in HATS — crowns mean royal only.
+export const PATTERNS = ["plain", "stripes", "spots", "gradient"];
+export const HATS = ["party", "tophat", "beanie", "pirate", "flower", "bow"];
+
+// HUE TINTS: the per-fish hue shift, applied as the body's base tint
+// (see updateFish in scene/fish.js) — near-white, so the species
+// colour still reads and hunger paleness / the deluxe gold glow still
+// override it exactly as before.
+export const HUE_TINTS = [0xfff2e0, 0xffffff, 0xe8f4ff];
 
 // SHOP LAYOUT: two rows across 960px. Each slot is 960/9 ≈ 106.7px wide;
 // buttons are 100x30, so labels stay readable.

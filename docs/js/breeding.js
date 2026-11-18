@@ -13,7 +13,7 @@
 //   { species, stage, lastFedSec, hungerSec, pregnant, breeding,
 //     breedCooldownSec, grabbed }. fishCount/cap are plain numbers.
 
-import { CONFIG } from "./config.js";
+import { CONFIG, TRAITS } from "./config.js";
 import { isHungry } from "./economy.js";
 
 export const BREED = {
@@ -28,7 +28,9 @@ export function canBreed(a, b, fishCount, cap) {
   if (!a || !b || a === b) return false;
   if (fishCount >= cap) return false;
   if (a.species !== b.species) return false;
-  if (a.stage !== 2 || b.stage !== 2) return false;
+  // LARGE or ROYAL (stage >= 2) — a royal fish is beyond large, so it
+  // can still breed; a medium fish cannot.
+  if (a.stage < 2 || b.stage < 2) return false;
   for (const f of [a, b]) {
     if (f.pregnant || f.breeding) return false;
     if ((f.breedCooldownSec || 0) > 0) return false;
@@ -55,6 +57,29 @@ export function findBreedPair(fish, cap) {
 // recently) becomes pregnant. Ties go to the first fish.
 export function pickPregnantParent(a, b) {
   return (a.hungerSec || 0) <= (b.hungerSec || 0) ? a : b;
+}
+
+// TRAIT + ROYAL-GENE ROLLS (pure, so the headless tests can run them
+// thousands of times). rollTrait is the fresh uniform roll used at
+// spawn; inheritTrait is the baby rule — 50% of the time the baby
+// takes one parent's trait (mum or dad, coin flip), else a fresh
+// roll. inheritRoyalGene is the gene rule — 75% with two royal
+// parents, 50% with one, else the 5% base roll.
+export function rollTrait() {
+  return TRAITS[Math.floor(Math.random() * TRAITS.length)];
+}
+export function inheritTrait(aTrait, bTrait) {
+  if (Math.random() < 0.5) {
+    const parents = bTrait ? [aTrait, bTrait] : [aTrait];
+    return parents[Math.floor(Math.random() * parents.length)];
+  }
+  return rollTrait();
+}
+export function inheritRoyalGene(aGene, bGene) {
+  const p = (aGene && bGene) ? CONFIG.royalGeneInheritBoth
+    : (aGene || bGene) ? CONFIG.royalGeneInheritOne
+    : CONFIG.royalGeneChance;
+  return Math.random() < p;
 }
 
 // An egg hatches only when there is room under the cap at hatch time.

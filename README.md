@@ -44,8 +44,25 @@ deploys this repo's `docs/` folder.)
   — tail wag speeds up with the fish.
 - **Growth:** 3 feeds = medium, 6 = large (Chomper: 4 and 8). Bigger fish
   drop bigger coins. A baby renders at ~half an adult size (0.6 / 0.9 /
-  1.2 growth scales × species size).
-- **Breeding (Minecraft-style):** two LARGE fish of the same species,
+  1.2 growth scales × species size). A fish carrying the royal gene can
+  grow one step further — see **Royalty** below.
+- **Fish traits:** every fish rolls one of five traits at spawn —
+  Greedy (chases food faster, chews plants in 1.0s), Shy (flinches
+  farther when poked, chases food slower, sprints rarely), Bold
+  (sprints from farther out, recovers in 1.5s), Lazy (slow tempo,
+  eats last), Social (wanders toward the school). Babies inherit a
+  parent's trait half the time. Hover a fish to see its trait.
+- **Visual variety:** each fish rolls a subtle pattern (plain, stripes,
+  spots, gradient belly) and a small hue shift inside its species
+  palette, and ~1 in 5 spawns wearing a small hat (party, top hat,
+  beanie, pirate hat, flower, bow) above its head.
+- **Royalty:** ~5% of fish are born carrying the royal gene (hidden
+  until it shows). Only gene carriers grow past large into ROYAL
+  (stage 3, +3 feeds after large): crown, ~1.35× scale, 2× the large
+  coin value and 2× the large sell price, and it counts as large for
+  the goal. The gene inherits through breeding — 50% with one royal
+  parent, 75% with two. Crowns mean royal only.
+- **Breeding (Minecraft-style):** two LARGE (or royal) fish of the same species,
   both fed within the last 30s and not hungry, tank not at cap — they
   swim together with hearts for ~3s, then the better-fed one is pregnant
   for 15s, pops out an egg that sinks to the floor, sits ~20s, then
@@ -109,7 +126,7 @@ deploys this repo's `docs/` folder.)
 
   Decorations add +5% each (max +15%), paid in cents: with all three,
   $1 → $1.15, $5 → $5.75, $10 → $11.50.
-- **Breeding:** two LARGE fish of the same species, both fed within the
+- **Breeding:** two LARGE (or royal) fish of the same species, both fed within the
   last 30s and not hungry, tank not at cap — they swim together with
   hearts for ~3s, then the better-fed one is pregnant for 15s (swollen
   belly, slower), pops out an egg that sinks to the floor, sits ~20s,

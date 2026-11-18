@@ -19,7 +19,7 @@ export const coinsMixin = {
     const x = fish.sprite.x;
     const y = fish.sprite.y + 14;
     const container = this.add.container(x, y).setDepth(6);
-    const img = this.add.image(0, 0, "coin-" + stage);
+    const img = this.add.image(0, 0, "coin-" + Math.min(stage, 2)); // royal (stage 3) uses the large coin art — the value is what doubles, not the picture
     const label = this.add.text(0, 0, moneyFmt(value), { fontSize: "11px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     container.add([img, label]);
     // Coins are NOT interactive any more. Their clicks are handled by

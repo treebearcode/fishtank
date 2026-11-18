@@ -12,13 +12,13 @@
 // creatures / feeding / coins / lifecycle / input) attached to
 // TankScene.prototype at the bottom of this file.
 
-import { CONFIG, SPECIES, SPECIES_ORDER, SHOP, SHOP_COL_X, DESC_BAR, DESC_DEFAULT_TEXT } from "../config.js";
+import { CONFIG, SPECIES, SPECIES_ORDER, SHOP, SHOP_COL_X, DESC_BAR, DESC_DEFAULT_TEXT, PATTERNS, HATS } from "../config.js";
 import { goalIsMet, countLargeFish } from "../economy.js";
 import { sfx } from "../sound.js";
 import {
   makeFishBodyTexture, makeFishTailTexture, makeDeadFishTexture, makeCoinTexture, makeSnailTexture,
   makePelletTexture, makeDeluxePelletTexture, makeFeastPlantFrondTexture, makeFeastPlantSkeletonTexture, makeCrabTexture, makeFeederBotTexture,
-  makeBotLightTexture, makeEggTexture, makeTreasureChestTexture,
+  makeBotLightTexture, makeEggTexture, makeTreasureChestTexture, makeHatTexture,
   makeJellyfishTexture, makeJellyBurstTexture,
 } from "../textures.js";
 import { uiMixin } from "./ui.js";
@@ -156,17 +156,22 @@ export class TankScene extends Phaser.Scene {
       this.plants.push(g);
     });
 
-    // --- Textures (drawn once, reused by every sprite). One body/tail
-    //     texture per species per stage (the starfish gets a star body
-    //     and NO tail — see makeFishBodyTexture).
+    // --- Textures (drawn once, reused by every sprite). One body
+    //     texture per species per stage per pattern, and one tail per
+    //     species per stage (stage 3 reuses the large body/tail
+    //     colours — the crown and the 1.35x scale mark a royal). The
+    //     starfish gets a star body and NO tail — see
+    //     makeFishBodyTexture. Hats are one texture per kind, plus
+    //     the crown (royal only — never rolled at spawn).
     for (const key of SPECIES_ORDER) {
       const sp = SPECIES[key];
-      for (let s = 0; s < 3; s++) {
-        makeFishBodyTexture(this, s, sp.key);
+      for (let s = 0; s < 4; s++) {
+        for (const pattern of PATTERNS) makeFishBodyTexture(this, s, sp.key, pattern);
         if (sp.hasTail) makeFishTailTexture(this, s, sp.key);
       }
       makeDeadFishTexture(this, sp.key); // grey belly-up version, one per species
     }
+    for (const kind of [...HATS, "crown"]) makeHatTexture(this, kind);
     for (let s = 0; s < 3; s++) makeCoinTexture(this, s);
     makeSnailTexture(this);
     makeCrabTexture(this);

@@ -362,13 +362,12 @@ export const shopMixin = {
     this.money = addMoney(this.money, price);
     this.floatText("+" + moneyFmt(price), fish.sprite.x, fish.sprite.y - 14, "#2ecc71");
     for (let i = 0; i < 5; i++) this.spawnBubble(fish.sprite.x, fish.sprite.y);
-    fish.sprite.destroy();
-    if (fish.tail) fish.tail.destroy();
+    this.destroyFishSprites(fish);
     this.fish.splice(this.fish.indexOf(fish), 1);
     // A sold fish leaves its hearts pair too (see removeBreedPair).
     this.removeBreedPair(fish);
     sfx.coin();
-    this.toast("Sold a " + (fish.stage === 2 ? "large" : fish.stage === 1 ? "medium" : "small") + " " + sp.name.toLowerCase() + " for " + moneyFmt(price) + ".");
+    this.toast("Sold a " + (fish.stage === 3 ? "royal" : fish.stage === 2 ? "large" : fish.stage === 1 ? "medium" : "small") + " " + sp.name.toLowerCase() + " for " + moneyFmt(price) + ".");
     this.updateShopUI();
     this.updateTopUI();
     this.updateGoalUI();

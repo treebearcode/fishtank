@@ -1,8 +1,8 @@
 // scene/lifecycle.js — TankScene mixin: breeding, eggs, predation.
 //
-// The breeding chain, in full: two LARGE fish of the SAME species,
-// both fed within the last 30s and not hungry, neither pregnant /
-// breeding / on cooldown / grabbed, tank not at cap -> formBreedPair()
+// The breeding chain, in full: two LARGE (or royal) fish of the SAME
+// species, both fed within the last 30s and not hungry, neither
+// pregnant / breeding / on cooldown / grabbed, tank not at cap -> formBreedPair()
 // marks them breeding and spawns pink hearts above them for ~3s while
 // they swim toward each other (see the breeding branch in the fish
 // steering code). When the hearts run out, the better-fed parent
@@ -25,7 +25,7 @@
 import { CONFIG, speciesDef } from "../config.js";
 import { stageForFeeds } from "../economy.js";
 import { findPrey, HUNT_CATCH_PX, CHOMP_GULP_SEC } from "../predation.js";
-import { findBreedPair, pickPregnantParent, eggCanHatch } from "../breeding.js";
+import { findBreedPair, pickPregnantParent, eggCanHatch, inheritTrait, inheritRoyalGene } from "../breeding.js";
 import { sfx } from "../sound.js";
 
 export const lifecycleMixin = {
@@ -108,7 +108,11 @@ export const lifecycleMixin = {
 
   // The pregnant fish pops out an egg at her position. Both parents
   // get their 60s breed cooldown NOW (at the pop, not at pairing), and
-  // the partner link is cleared.
+  // the partner link is cleared. The egg carries what the baby
+  // inherits: a parent's trait (50% of the time, else a fresh roll)
+  // and the royal gene (50% with one royal parent, 75% with two,
+  // else the 5% base roll). The pattern and the hat are NOT
+  // inherited — a baby rolls its own look.
   layEgg(mum) {
     const dad = mum.breedPartner;
     mum.breedCooldownSec = CONFIG.breedCooldownSec;
@@ -116,7 +120,11 @@ export const lifecycleMixin = {
     mum.breedPartner = null;
     if (dad) dad.breedPartner = null;
     const sprite = this.add.image(mum.sprite.x, mum.sprite.y + 10, "egg").setDepth(4);
-    this.eggs.push({ sprite, species: mum.species, waitSec: CONFIG.breedEggWaitSec, sinking: true, pulse: 0 });
+    this.eggs.push({
+      sprite, species: mum.species, waitSec: CONFIG.breedEggWaitSec, sinking: true, pulse: 0,
+      trait: inheritTrait(mum.trait, dad ? dad.trait : null),
+      royalGene: inheritRoyalGene(!!mum.royalGene, !!(dad && dad.royalGene)),
+    });
     sfx.pop();
   },
 
@@ -142,7 +150,7 @@ export const lifecycleMixin = {
             continue;
           }
           const sp = speciesDef(egg.species);
-          this.spawnFish(egg.sprite.x, CONFIG.floorY - 30, egg.species);
+          this.spawnFish(egg.sprite.x, CONFIG.floorY - 30, egg.species, { trait: egg.trait, royalGene: egg.royalGene });
           egg.sprite.destroy();
           this.eggs.splice(this.eggs.indexOf(egg), 1);
           sfx.buy();
@@ -155,7 +163,7 @@ export const lifecycleMixin = {
 
   updateHunting() {
     for (const hunter of [...this.fish]) {
-      if (hunter.species !== "chomper" || hunter.stage !== 2) continue;
+      if (hunter.species !== "chomper" || hunter.stage < 2) continue;
       if (hunter.grabbed || hunter.breeding) continue;
       if ((hunter.hungerSec || 0) <= 0) continue; // well-fed: no hunting
       const prey = findPrey(hunter, this.fish, HUNT_CATCH_PX);
@@ -166,8 +174,7 @@ export const lifecycleMixin = {
   eatBaby(hunter, prey) {
     if (!this.fish.includes(hunter) || !this.fish.includes(prey)) return;
     const sp = speciesDef(prey.species);
-    prey.sprite.destroy();
-    if (prey.tail) prey.tail.destroy();
+    this.destroyFishSprites(prey);
     this.fish.splice(this.fish.indexOf(prey), 1);
     // A baby cannot be in a hearts pair, but clear the link anyway so
     // no partner is left swimming at a ghost.
@@ -176,7 +183,7 @@ export const lifecycleMixin = {
     hunter.hungerSec = 0;  // a meal resets the hunger clock
     hunter.lastFedSec = 0; // and the breeding "recently fed" clock
     hunter.gulpSec = CHOMP_GULP_SEC; // brief scale pulse (animateFish)
-    const newStage = stageForFeeds(hunter.feeds, hunter.species);
+    const newStage = stageForFeeds(hunter.feeds, hunter.species, hunter.royalGene);
     if (newStage !== hunter.stage) {
       hunter.stage = newStage;
       this.setFishStageVisual(hunter);
