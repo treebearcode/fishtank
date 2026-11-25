@@ -36,7 +36,7 @@ export const SAVE_CODE_ERROR = "That code doesn't look right — check it and tr
 function domButton(label, gold) {
   const b = document.createElement("button");
   b.textContent = label;
-  b.style.cssText = "width:120px;height:34px;font-size:15px;font-weight:bold;" +
+  b.style.cssText = "box-sizing:border-box;width:120px;height:34px;font-size:15px;font-weight:bold;" +
     (gold
       ? "background:#ffd23f;color:#12394d;border:2px solid #8a6a1f;"
       : "background:#2a5a75;color:#eaf6ff;border:2px solid #8a6a1f;") +
@@ -51,10 +51,26 @@ function domInput(readonly, placeholder) {
   if (placeholder) input.placeholder = placeholder;
   input.spellcheck = false;
   input.autocomplete = "off";
-  input.style.cssText = "width:500px;height:30px;font-size:14px;padding:2px 8px;" +
+  input.style.cssText = "box-sizing:border-box;width:500px;height:30px;font-size:14px;padding:2px 8px;" +
     "border:2px solid #ffd23f;background:#0b2a3a;color:#ffffff;border-radius:4px;outline:none;";
   return input;
 }
+
+// DOM LAYOUT — every save-code DOM element is anchored by its
+// TOP-LEFT corner (setOrigin(0, 0)) and positioned in game
+// coordinates, so the layout is exact at any FIT scale: the Phaser
+// DOM container is scaled to the canvas, so a 500px field at game
+// x=230 always spans 230..730 inside the 540-wide dialog, whether
+// the canvas is 960px or 1919px wide. The previous layout centred
+// the elements on their anchor (the default origin 0.5, 0.5), which
+// only works if Phaser's one-time size measurement (updateSize, at
+// creation) sees the real width — when it measures 0, the origin
+// offset vanishes and the node lands with its top-left at the
+// anchor instead: at 1919x998 the field started at the dialog's
+// centre and ran ~400px past its right edge, and the buttons fell
+// outside the box. Top-left anchoring does not depend on that
+// measurement at all, and box-sizing:border-box above makes the CSS
+// width the outer width, so the rects below are exact.
 
 export const savecodeMixin = {
   // Build both panels once (called from create()). Hidden until used.
@@ -76,14 +92,16 @@ export const savecodeMixin = {
     exp.codeText = expCodeText;
     this.exportPanel = exp;
     if (this._saveDom) {
-      const inputEl = this.add.dom(480, 252, domInput(true)).setVisible(false);
+      // Field: top-left (230, 232), 500 wide — spans 230..730 inside
+      // the 210..750 dialog; buttons row below it, hint at y=332 clear.
+      const inputEl = this.add.dom(230, 232, domInput(true)).setOrigin(0, 0).setVisible(false);
       exp.input = inputEl;
       const copyBtn = domButton("Copy", true);
       copyBtn.addEventListener("click", () => this.copySaveCode());
-      exp.copyBtn = this.add.dom(410, 305, copyBtn).setVisible(false);
+      exp.copyBtn = this.add.dom(350, 288, copyBtn).setOrigin(0, 0).setVisible(false);
       const closeBtn = domButton("Close", false);
       closeBtn.addEventListener("click", () => this.hideExportPanel());
-      exp.closeBtn = this.add.dom(550, 305, closeBtn).setVisible(false);
+      exp.closeBtn = this.add.dom(490, 288, closeBtn).setOrigin(0, 0).setVisible(false);
     }
 
     // --- IMPORT PANEL: over the title screen (depth 25). Its shade
@@ -99,14 +117,17 @@ export const savecodeMixin = {
     imp.errorText = impError;
     this.importPanel = imp;
     if (this._saveDom) {
-      const inputEl = this.add.dom(480, 240, domInput(false, "Paste your save code here")).setVisible(false);
+      // Field: top-left (230, 208), 500 wide — spans 230..730 inside
+      // the 210..750 dialog; buttons row below it, error line at y=332
+      // and hint at y=362 both clear of the buttons (which end at 296).
+      const inputEl = this.add.dom(230, 208, domInput(false, "Paste your save code here")).setOrigin(0, 0).setVisible(false);
       imp.input = inputEl;
       const loadBtn = domButton("Load", true);
       loadBtn.addEventListener("click", () => this.loadImportCode());
-      imp.loadBtn = this.add.dom(410, 300, loadBtn).setVisible(false);
+      imp.loadBtn = this.add.dom(350, 262, loadBtn).setOrigin(0, 0).setVisible(false);
       const cancelBtn = domButton("Cancel", false);
       cancelBtn.addEventListener("click", () => this.hideImportPanel());
-      imp.cancelBtn = this.add.dom(550, 300, cancelBtn).setVisible(false);
+      imp.cancelBtn = this.add.dom(490, 262, cancelBtn).setOrigin(0, 0).setVisible(false);
     }
   },
 

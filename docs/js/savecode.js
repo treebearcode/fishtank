@@ -96,6 +96,16 @@ function crc8(bytes) {
 }
 
 // --- base64url, hand-rolled (no btoa — this module runs in node too) ------
+// Every character carries 6 bits, so the last character of a code can
+// end mid-byte: the trailing 0, 2 or 4 bits after the last whole byte
+// are PADDING, and encode always writes them as zero. Decode returns
+// them alongside the bytes, and decodeSaveCode REJECTS a code whose
+// padding bits are not zero — without that check, a typo confined to
+// those bits (e.g. changing the final character's low bits) would
+// decode to the exact same bytes and load silently. The CRC cannot
+// catch it: those bits never reach a byte, so they never reach the
+// CRC. (The payload's own byte padding — the zero bits after the
+// last fish field — is checked separately at the end of decode.)
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 function bytesToBase64url(bytes) {
   let out = "";
@@ -121,7 +131,11 @@ function base64urlToBytes(str) {
       bytes.push((acc >> nbits) & 0xff);
     }
   }
-  return bytes; // leftover bits (<8) are the zero padding from encode
+  // Bits left over after the last whole byte (<8) are the zero
+  // padding from encode — return their value so the caller can
+  // reject a code whose final character was typo'd into them.
+  const leftover = nbits === 0 ? 0 : acc & ((1 << nbits) - 1);
+  return { bytes, leftover };
 }
 
 // Hat codes: 0 = none, 1-6 = HATS in order, 7 = crown (royal only —
@@ -196,9 +210,15 @@ export function decodeSaveCode(code) {
   const clean = code.replace(/[.\s]/g, "");
   if (clean.length < 14) return fail("too short");
   if (/[^A-Za-z0-9_-]/.test(clean)) return fail("bad characters");
-  const bytes = base64urlToBytes(clean);
+  const decoded = base64urlToBytes(clean);
   // 10 bytes is the smallest valid code (empty tank: 9 payload + CRC).
-  if (!bytes || bytes.length < 10) return fail("too short");
+  if (!decoded) return fail("bad characters");
+  // The trailing base64 padding bits must be zero (encode writes
+  // them zero) — otherwise a change to the final character that
+  // only touches those bits would load the same state silently.
+  if (decoded.leftover !== 0) return fail("bad padding");
+  const bytes = decoded.bytes;
+  if (bytes.length < 10) return fail("too short");
   const crc = bytes[bytes.length - 1];
   const payload = bytes.slice(0, -1);
   if (crc8(payload) !== crc) return fail("checksum mismatch");

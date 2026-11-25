@@ -18,11 +18,12 @@ function makeStubObj() {
   const o = {
     x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, alpha: 1,
     visible: true, flipX: false, texture: null, text: "", color: null,
+    originX: 0.5, originY: 0.5,
     destroyed: false, _handlers: {},
   };
   o.setDepth = function () { return o; };
   o.setVisible = function (v) { o.visible = !!v; return o; };
-  o.setOrigin = function () { return o; };
+  o.setOrigin = function (x, y) { o.originX = x; o.originY = (y === undefined ? x : y); return o; };
   o.setScale = function (x, y) { o.scaleX = x; o.scaleY = (y === undefined ? x : y); return o; };
   o.setInteractive = function () { return o; };
   o.setFillStyle = function () { return o; };
@@ -76,6 +77,9 @@ function makeSceneStubs() {
     container: function (x, y) { return at(x, y); },
     rectangle: function (x, y) { return at(x, y); },
     circle: function (x, y) { return at(x, y); },
+    // DOM elements: record the anchor, node and origin like the real
+    // Phaser DOMElement (default origin 0.5, 0.5; setOrigin overrides).
+    dom: function (x, y, node) { const o = at(x, y); o.node = node; return o; },
   };
   return stubs;
 }
@@ -3784,6 +3788,99 @@ test("savecode: pause menu has an Export button, title screen has an Import butt
   t.importBtn._handlers["pointerdown"]();
   assert(t.importPanel.visible, "import panel opens");
   eq(t.importPanel.errorText.visible, false, "no error yet");
+});
+
+test("savecode: changing ANY single character of a valid code is rejected, including the last", () => {
+  // A real code exported by f95c24e ($94, 3 guppies) — it must still decode.
+  const code = "EMAJLg.AAAAAA.ASWIAJ.opQSJ8.wBw";
+  const res = G.decodeSaveCode(code);
+  assert(res.ok, "f95c24e code decodes: " + res.reason);
+  eq(res.state.money, 94, "money $94");
+  eq(res.state.fish.length, 3, "three fish");
+  // Flip every character of the dotless code in turn (dots are only
+  // separators — decode strips them, so the dotless form is equivalent).
+  const clean = code.replace(/[.]/g, "");
+  for (let i = 0; i < clean.length; i++) {
+    const flipped = clean.slice(0, i) + (clean[i] === "A" ? "B" : "A") + clean.slice(i + 1);
+    const r = G.decodeSaveCode(flipped);
+    assert(!r.ok, "char " + i + " (" + clean[i] + " -> " + flipped[i] + ") must be rejected, got " + JSON.stringify(r));
+  }
+  // The discriminating case: the last character's low 2 bits are
+  // base64 padding, not payload — changing them must be rejected even
+  // though the decoded bytes would be identical. "w" (110000) -> "x"
+  // (110001) / "y" (110010) / "z" (110011) only touch padding bits.
+  for (const c of ["x", "y", "z"]) {
+    const r = G.decodeSaveCode(clean.slice(0, -1) + c);
+    assert(!r.ok, "last char w->" + c + " (padding bits only) must be rejected, got " + JSON.stringify(r));
+  }
+});
+
+// --- Save-code dialog layout (defect 1) ------------------------------------
+// Headless geometry only: the real rendering still needs the live
+// check, but the defect was geometry — DOM elements centred on their
+// anchor landing with their top-left at the anchor instead — so
+// asserting the rects in game coordinates guards it. The DOM branch
+// only runs with a document, so this test installs a minimal fake
+// one for its duration and removes it afterwards.
+function fakeDocument() {
+  const makeEl = function (tag) {
+    return {
+      tagName: tag.toUpperCase(), type: "", value: "", textContent: "",
+      readOnly: false, placeholder: "", spellcheck: false, autocomplete: "",
+      style: {},
+      addEventListener: function () {},
+      select: function () {}, focus: function () {},
+    };
+  };
+  return { createElement: makeEl };
+}
+// CSS size of a save-code DOM element (box-sizing:border-box, so the
+// cssText width/height are the outer size).
+function domCssPx(el, prop) {
+  const m = new RegExp(prop + ":\\s*(\\d+)px").exec(el.node.style.cssText || "");
+  return m ? parseInt(m[1], 10) : 0;
+}
+function assertDomInside(el, box, label) {
+  assert(el, label + " exists");
+  eq(el.originX, 0, label + " anchored by its left edge");
+  eq(el.originY, 0, label + " anchored by its top edge");
+  const w = domCssPx(el, "width"), h = domCssPx(el, "height");
+  assert(w > 0 && h > 0, label + " has a CSS size");
+  assert(el.x >= box.left && el.x + w <= box.right,
+    label + " horizontal " + el.x + ".." + (el.x + w) + " must fit " + box.left + ".." + box.right);
+  assert(el.y >= box.top && el.y + h <= box.bottom,
+    label + " vertical " + el.y + ".." + (el.y + h) + " must fit " + box.top + ".." + box.bottom);
+  return { top: el.y, bottom: el.y + h };
+}
+test("savecode: dialog DOM elements sit inside their dialog boxes", () => {
+  const prevDoc = global.document;
+  global.document = fakeDocument();
+  try {
+    // Export panel: bg 540x170 centred (480,270) -> x 210..750, y 185..355;
+    // hint line at y=332, title at y=202.
+    const s = makeScene();
+    s._stubs.keyboardHandlers["keydown-P"]();
+    s.pauseMenu.exportRect._handlers["pointerdown"]();
+    const expBox = { left: 210, top: 185, right: 750, bottom: 355 };
+    const expField = assertDomInside(s.exportPanel.input, expBox, "export field");
+    const expCopy = assertDomInside(s.exportPanel.copyBtn, expBox, "export Copy");
+    const expClose = assertDomInside(s.exportPanel.closeBtn, expBox, "export Close");
+    assert(expField.bottom <= expCopy.top, "export field sits above the buttons");
+    assert(expCopy.bottom <= 332 && expClose.bottom <= 332, "export buttons sit above the hint line");
+    // Import panel: bg 540x220 centred (480,270) -> x 210..750, y 160..380;
+    // error line at y=332, hint line at y=362, title at y=178.
+    const t = makeTitleScene();
+    t.importBtn._handlers["pointerdown"]();
+    const impBox = { left: 210, top: 160, right: 750, bottom: 380 };
+    const impField = assertDomInside(t.importPanel.input, impBox, "import field");
+    const impLoad = assertDomInside(t.importPanel.loadBtn, impBox, "import Load");
+    const impCancel = assertDomInside(t.importPanel.cancelBtn, impBox, "import Cancel");
+    assert(impField.bottom <= impLoad.top, "import field sits above the buttons");
+    assert(impLoad.bottom <= 332 && impCancel.bottom <= 332, "import buttons sit above the error line");
+  } finally {
+    if (prevDoc === undefined) delete global.document;
+    else global.document = prevDoc;
+  }
 });
 
 // ===========================================================================
