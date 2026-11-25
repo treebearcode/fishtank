@@ -61,16 +61,24 @@ function domInput(readonly, placeholder) {
 // coordinates, so the layout is exact at any FIT scale: the Phaser
 // DOM container is scaled to the canvas, so a 500px field at game
 // x=230 always spans 230..730 inside the 540-wide dialog, whether
-// the canvas is 960px or 1919px wide. The previous layout centred
-// the elements on their anchor (the default origin 0.5, 0.5), which
-// only works if Phaser's one-time size measurement (updateSize, at
-// creation) sees the real width — when it measures 0, the origin
-// offset vanishes and the node lands with its top-left at the
-// anchor instead: at 1919x998 the field started at the dialog's
-// centre and ran ~400px past its right edge, and the buttons fell
-// outside the box. Top-left anchoring does not depend on that
-// measurement at all, and box-sizing:border-box above makes the CSS
-// width the outer width, so the rects below are exact.
+// the canvas is 960px or 1919px wide. That is true ONLY because the
+// DOM container div sits exactly over the canvas: Phaser copies the
+// canvas's margins onto it (ScaleManager.refresh) and style.css pins
+// it to the parent's top-left (#game > div { left: 0; top: 0 }) while
+// #game is NOT a flex container. The previous layout bug was NOT the
+// elements' origin at all — it was the container's position: #game
+// was display:flex with align/justify-content:center, so the browser
+// put the absolutely-positioned container at its flex static
+// position, the centred spot of a 960x540 box, about (+220,+124)
+// game px away from the canvas (at 1919x998 the fields landed ~445px
+// right and ~230px down of their dialogs, while the canvas dialog
+// boxes rendered exactly where coded). setOrigin(0,0) could never
+// fix that; moving the container to sit over the canvas does.
+// box-sizing:border-box on the elements below makes the CSS width
+// the outer width, so the rects below are exact. Headless tests can
+// only assert these game-coordinate rects — the live render still
+// needs the live check, because no stub models the container's
+// screen position.
 
 export const savecodeMixin = {
   // Build both panels once (called from create()). Hidden until used.
@@ -83,8 +91,9 @@ export const savecodeMixin = {
     const exp = this.add.container(480, 270).setDepth(25).setVisible(false);
     const expBg = this.add.rectangle(0, 0, 540, 170, 0x0b2a3a, 0.97).setStrokeStyle(3, 0xffd23f);
     const expTitle = this.add.text(0, -68, "Save Code", { fontSize: "20px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0.5);
-    const expHint = this.add.text(0, 62, "Copy it somewhere safe — the code IS your save. Paste it back on the title screen.", { fontSize: "12px", color: "#eaf6ff" }).setOrigin(0.5, 0.5);
+    const expHint = this.add.text(0, 62, "Copy it somewhere safe — the code IS your save.", { fontSize: "12px", color: "#eaf6ff" }).setOrigin(0.5, 0.5);
     exp.add([expBg, expTitle, expHint]);
+    exp.hintText = expHint;
     // The code as Phaser text — the no-DOM fallback (hidden when the
     // selectable DOM input below exists, so the code never shows twice).
     const expCodeText = this.add.text(0, -20, "", { fontSize: "13px", color: "#ffffff", align: "center", wordWrap: { width: 500 } }).setOrigin(0.5, 0.5);
@@ -115,6 +124,7 @@ export const savecodeMixin = {
     const impError = this.add.text(0, 62, "", { fontSize: "13px", color: "#ff8a80", fontStyle: "bold" }).setOrigin(0.5, 0.5).setVisible(false);
     imp.add([impShade, impBg, impTitle, impHint, impError]);
     imp.errorText = impError;
+    imp.hintText = impHint;
     this.importPanel = imp;
     if (this._saveDom) {
       // Field: top-left (230, 208), 500 wide — spans 230..730 inside

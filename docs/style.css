@@ -16,10 +16,24 @@ body {
 #game {
   width: 100%;
   height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   touch-action: none;
+}
+/* The Phaser DOM container (the save-code <input> / <button> elements
+   live in it) must sit exactly over the canvas. Phaser copies the
+   canvas's margins onto it and scales it to the canvas, but never
+   sets left/top — so its position is its static position, and it is
+   the only <div> child of #game. Pin it to the parent's top-left:
+   the copied margins then place it exactly where the canvas is.
+   DO NOT centre #game with flexbox: that double-centres the canvas
+   (Phaser's margins + flex) and — worse — puts this container at its
+   flex static position, the centred spot of a 960x540 box, which
+   shifted every save-code field/button by about (+220,+124) game px
+   (the layout bug: at 1919x998 the fields landed ~445px right and
+   ~230px down of their dialogs). Phaser's CENTER_BOTH margins are
+   the only centring the canvas needs. */
+#game > div {
+  left: 0;
+  top: 0;
 }
 #game canvas {
   display: block;

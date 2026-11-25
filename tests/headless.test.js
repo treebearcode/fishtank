@@ -3815,13 +3815,22 @@ test("savecode: changing ANY single character of a valid code is rejected, inclu
   }
 });
 
-// --- Save-code dialog layout (defect 1) ------------------------------------
-// Headless geometry only: the real rendering still needs the live
-// check, but the defect was geometry — DOM elements centred on their
-// anchor landing with their top-left at the anchor instead — so
-// asserting the rects in game coordinates guards it. The DOM branch
-// only runs with a document, so this test installs a minimal fake
-// one for its duration and removes it afterwards.
+// --- Save-code dialog layout ------------------------------------------------
+// Headless geometry only: this test asserts the DOM elements' rects
+// in GAME coordinates (top-left anchored, inside their dialog boxes).
+// It CANNOT verify the live layout — the defect that broke it twice
+// was never the game coordinates. The DOM container div sits over the
+// canvas only because Phaser copies the canvas margins onto it AND
+// style.css pins it to the parent's top-left while #game is not a
+// flex container; when #game was display:flex, the browser put the
+// container at its flex static position, the centred spot of a
+// 960x540 box, about (+220,+124) game px off the canvas — the fields
+// landed ~445px right and ~230px down of their dialogs at 1919x998
+// while every game coordinate here was already correct. No stub
+// models the container's screen position, so the live render still
+// needs the live check. The DOM branch only runs with a document, so
+// this test installs a minimal fake one for its duration and removes
+// it afterwards.
 function fakeDocument() {
   const makeEl = function (tag) {
     return {
@@ -3867,6 +3876,15 @@ test("savecode: dialog DOM elements sit inside their dialog boxes", () => {
     const expClose = assertDomInside(s.exportPanel.closeBtn, expBox, "export Close");
     assert(expField.bottom <= expCopy.top, "export field sits above the buttons");
     assert(expCopy.bottom <= 332 && expClose.bottom <= 332, "export buttons sit above the hint line");
+    // Export hint: short enough to fit the 540-wide dialog at 12px
+    // (the old line ran past both edges), and below the buttons.
+    // Hint text is container-relative (0,62); the panel sits at
+    // (480,270), so its game y is 332.
+    const expHint = s.exportPanel.hintText;
+    assert(expHint, "export hint exists");
+    assert(expHint.text.length <= 60, "export hint fits the dialog, got " + expHint.text.length + " chars: " + expHint.text);
+    eq(270 + expHint.y, 332, "export hint line");
+    assert(expCopy.bottom <= 270 + expHint.y, "export buttons sit above the hint line");
     // Import panel: bg 540x220 centred (480,270) -> x 210..750, y 160..380;
     // error line at y=332, hint line at y=362, title at y=178.
     const t = makeTitleScene();
@@ -3877,6 +3895,14 @@ test("savecode: dialog DOM elements sit inside their dialog boxes", () => {
     const impCancel = assertDomInside(t.importPanel.cancelBtn, impBox, "import Cancel");
     assert(impField.bottom <= impLoad.top, "import field sits above the buttons");
     assert(impLoad.bottom <= 332 && impCancel.bottom <= 332, "import buttons sit above the error line");
+    // Import hint at relative (0,92) -> game y 362: inside the dialog,
+    // below the buttons and the error line, so it is never covered by
+    // the field once the field is inside the box.
+    const impHint = t.importPanel.hintText;
+    assert(impHint, "import hint exists");
+    eq(270 + impHint.y, 362, "import hint line");
+    assert(impLoad.bottom <= 270 + impHint.y && 270 + impHint.y <= impBox.bottom,
+      "import hint sits below the buttons and inside the dialog");
   } finally {
     if (prevDoc === undefined) delete global.document;
     else global.document = prevDoc;
