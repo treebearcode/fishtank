@@ -11,6 +11,7 @@ export * from "./snail.js";
 export * from "./animation.js";
 export * from "./input.js";
 export * from "./magnet.js";
+export * from "./savecode.js";
 export * from "./sound.js";
 export * from "./textures.js";
 export { TankScene } from "./scene/tank.js";

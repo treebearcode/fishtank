@@ -4,7 +4,7 @@
 // coins), and crowd separation.
 
 import { CONFIG, speciesDef, TRAIT_DESCS, PATTERNS, HATS, HUE_TINTS } from "../config.js";
-import { fishScale, isHungry, isDead } from "../economy.js";
+import { fishScale, isHungry, isDead, stageForFeeds } from "../economy.js";
 import { findPrey, CHOMP_GULP_SEC } from "../predation.js";
 import { rollTrait } from "../breeding.js";
 import { tailWiggle, tailJointFor, tailRotationFor, fishTiltFor } from "../animation.js";
@@ -36,14 +36,23 @@ export const fishMixin = {
     //     the inherited gene). Hidden until stage 3.
     //   HAT — ~20% spawn wearing one of the 6 hats (never a crown).
     const trait = (opts && opts.trait) || rollTrait();
-    const pattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
-    const hueTint = HUE_TINTS[Math.floor(Math.random() * HUE_TINTS.length)];
+    const pattern = (opts && opts.pattern && PATTERNS.includes(opts.pattern))
+      ? opts.pattern
+      : PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+    const hueTint = (opts && opts.hueTint && HUE_TINTS.includes(opts.hueTint))
+      ? opts.hueTint
+      : HUE_TINTS[Math.floor(Math.random() * HUE_TINTS.length)];
     const royalGene = (opts && opts.royalGene !== undefined)
       ? opts.royalGene
       : (Math.random() < CONFIG.royalGeneChance);
-    const hatKind = Math.random() < CONFIG.hatChance
-      ? HATS[Math.floor(Math.random() * HATS.length)]
-      : null;
+    // A save code carries the hat too (opts.hatKind) — "crown" is a
+    // legal value here (a royal fish loads wearing its crown); any
+    // other unknown value falls back to a fresh roll.
+    const hatKind = (opts && opts.hatKind !== undefined)
+      ? (opts.hatKind === null || opts.hatKind === "crown" || HATS.includes(opts.hatKind) ? opts.hatKind : null)
+      : (Math.random() < CONFIG.hatChance
+        ? HATS[Math.floor(Math.random() * HATS.length)]
+        : null);
     const tail = sp.hasTail
       ? this.add.image(x, y, "fish-tail-" + sp.key + "-0").setOrigin(1, 0.5).setDepth(5)
       : null;
@@ -105,6 +114,27 @@ export const fishMixin = {
       gulpSec: 0,
     };
     this.fish.push(fish);
+    // IMPORTED FISH (see scene/savecode.js): a save code carries the
+    // fish's feeds / hunger / tempo, so a loaded fish resumes where
+    // it left off instead of arriving as a fresh baby. Stage is
+    // derived from feeds + the royal gene (stageForFeeds) — the code
+    // never stores it separately, so a loaded fish can never disagree
+    // with the game's own growth rules. lastFedSec follows hungerSec:
+    // a fish that has not eaten for X seconds was last fed X seconds
+    // ago. Each field applies independently (a caller may pass
+    // hungerSec without feeds) — applied BEFORE setFishStageVisual,
+    // so the visuals match.
+    if (opts) {
+      if (opts.feeds !== undefined) {
+        fish.feeds = Math.max(0, opts.feeds);
+        fish.stage = stageForFeeds(fish.feeds, fish.species, fish.royalGene);
+      }
+      if (opts.hungerSec !== undefined) {
+        fish.hungerSec = Math.max(0, opts.hungerSec);
+        fish.lastFedSec = fish.hungerSec;
+      }
+      if (opts.tempo !== undefined) fish.tempo = opts.tempo;
+    }
     // Apply the stage/species scale at spawn, so a baby arrives at
     // ~0.6x (not 1x) — setFishStageVisual fixes scale and texture in
     // one place.

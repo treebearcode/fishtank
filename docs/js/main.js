@@ -18,6 +18,10 @@ function startGame() {
     height: CONFIG.height,
     backgroundColor: "#1e7fa8",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    // DOM container: the save-code panels use real <input> / <button>
+    // elements (this.add.dom) for paste / select / copy — see
+    // scene/savecode.js. Without this, add.dom has nowhere to put them.
+    dom: { createContainer: true },
     scene: TankScene,
   });
   return !!game;

@@ -102,7 +102,22 @@ deploys this repo's `docs/` folder.)
 - **Pause menu (P or the Pause button):** Volume slider (0–100%, master
   volume for all sounds, session-only) and a game-speed selector
   1x/2x/3x/4x — the menu is the only speed control (the old 2x shop
-  toggle is gone). Speed scales everything, hunger included.
+  toggle is gone). Speed scales everything, hunger included. The menu
+  also has **Export Save Code** — see **Save codes** below.
+- **Save codes (import / export):** no localStorage, no cookies, no
+  server — the code IS the save. **Export Save Code** in the pause menu
+  shows the whole run as a short code (~25 chars for a starter tank,
+  ~93 for a full 16-fish tank) in a selectable field, with a Copy
+  button; **Import Save** on the title screen pastes one back in. The
+  code is bit-packed base64url with a checksum, so a typo'd code is
+  rejected with an error instead of loading garbage. Money, fish
+  (species, feeds, hunger, tempo, trait, pattern, hue, hat, royal
+  gene), helpers, magnet level, decorations, tank upgrade, food type
+  and the goal are all restored; fish respawn at random positions,
+  the event clock re-rolls (first event 60–90s after load), and a
+  pregnant fish loads as not-pregnant. Restoring ignores the fish cap
+  (a save is a restore, not a purchase) — the cap still applies to
+  new buying and breeding afterwards.
 - **Input:** click water = drop food, click coin = collect (UI > coins >
   fish > water priority, one dispatcher), tap fish = poke, drag fish =
   move it, drag onto Sell = sell it (prices depend on species and size).
@@ -110,7 +125,9 @@ deploys this repo's `docs/` folder.)
   buying that fish — both at the same 0.1s cadence, after a 0.3s
   initial delay so a quick tap is exactly one action.
 - **Goal:** bank $1,000 total and own 3 large fish → "Goal met!" popup
-  with Restart / Continue. No save yet — closing the page resets the run.
+  with Restart / Continue. To keep a run, export its save code from
+  the pause menu (see **Save codes** above) — closing the page
+  without one resets the run.
 
 ## How to play
 
@@ -218,6 +235,7 @@ docs/
     animation.js      Pure tail wiggle / joint / tilt / drift math
     input.js          Pure hitboxes and the pointer-target resolver
     magnet.js         Magnet drag-chain levels + pure drag/hover math
+    savecode.js       Import/export save-code codec (bit-packed base64url + CRC-8)
     sound.js          Tiny WebAudio beeps (no audio files)
     textures.js       All procedural art (fish, coins, snail, crab, bot, egg)
     index.js          Barrel re-exporting everything (tests import this)
@@ -231,9 +249,10 @@ docs/
       coins.js        Coin drops, collection, sinking, magnet drag
       lifecycle.js    Breeding, eggs, predation (scene side)
       input.js        The one pointer dispatcher (poke / grab / sell)
+      savecode.js     Import/export save-code panels + state collect/restore
 tests/
   phaser-stub.js      Sets global.Phaser before the game modules load
-  headless.test.js    139 node tests (Phaser stubbed) — run:
+  headless.test.js    270 node tests (Phaser stubbed) — run:
                       node tests/headless.test.js   (exit 0 = all green)
 README.md
 CREDITS.md
@@ -245,10 +264,10 @@ class split across mixin files: `scene/tank.js` attaches the mixins with
 file while sharing the same scene state.
 
 The headless test suite imports the barrel (`docs/js/index.js`) and runs the
-real scene against a Phaser stub — the same 139 tests cover the species
+real scene against a Phaser stub — the same 270 tests cover the species
 table, cents, breeding chain, shop reuse, Sell bounds, feeder-bot band,
 and the tail-geometry regressions.
 
 ## Ideas for later
 
-Aliens that eat fish, save-to-localStorage, tank cleaning, daily quests.
+Aliens that eat fish, tank cleaning, daily quests.

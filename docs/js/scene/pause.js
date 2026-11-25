@@ -25,15 +25,15 @@ export const pauseMixin = {
   buildPauseMenu() {
     const menu = this.add.container(480, 270).setDepth(20).setVisible(false);
     const shade = this.add.rectangle(0, 0, CONFIG.width, CONFIG.height, 0x0b2a3a, 0.72).setOrigin(0.5, 0.5);
-    const panel = this.add.rectangle(0, 0, 460, 300, 0x12394d, 1).setStrokeStyle(3, 0xffd23f);
-    const title = this.add.text(0, -130, "Paused", { fontSize: "30px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    const panel = this.add.rectangle(0, 0, 460, 360, 0x12394d, 1).setStrokeStyle(3, 0xffd23f);
+    const title = this.add.text(0, -160, "Paused", { fontSize: "30px", color: "#ffe27a", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     menu.add([shade, panel, title]);
 
     // --- Volume: label + click/drag slider + % readout.
-    const volLabel = this.add.text(0, -95, "Volume", { fontSize: "16px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
-    const track = this.add.rectangle(0, -70, TRACK_X1 - TRACK_X0, 10, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
-    const handle = this.add.circle(-150 + 300 * sfx.getVolume(), -70, 10, 0xffd23f).setInteractive({ useHandCursor: true });
-    const volText = this.add.text(170, -70, Math.round(sfx.getVolume() * 100) + "%", { fontSize: "14px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0, 0.5);
+    const volLabel = this.add.text(0, -125, "Volume", { fontSize: "16px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    const track = this.add.rectangle(0, -100, TRACK_X1 - TRACK_X0, 10, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
+    const handle = this.add.circle(-150 + 300 * sfx.getVolume(), -100, 10, 0xffd23f).setInteractive({ useHandCursor: true });
+    const volText = this.add.text(170, -100, Math.round(sfx.getVolume() * 100) + "%", { fontSize: "14px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0, 0.5);
     track.on("pointerdown", (pointer) => { if (this.paused) this.volumeFromX(pointer.x); });
     // Drag the handle: Phaser's drag plugin moves it; the drag handler
     // clamps it to the track and sets the volume from its position.
@@ -51,26 +51,34 @@ export const pauseMixin = {
     menu.add([volLabel, track, handle, volText]);
 
     // --- Speed: 1x / 2x / 3x / 4x. Current speed is gold, the rest dark.
-    const speedLabel = this.add.text(0, -35, "Game Speed", { fontSize: "16px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    const speedLabel = this.add.text(0, -65, "Game Speed", { fontSize: "16px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     menu.add(speedLabel);
     const speedBtns = {};
     CONFIG.gameSpeeds.forEach((mult, i) => {
       const bx = -135 + i * 90;
-      const rect = this.add.rectangle(bx, 0, 70, 30, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
+      const rect = this.add.rectangle(bx, -30, 70, 30, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
       rect.setStrokeStyle(2, 0x8a6a1f);
-      const label = this.add.text(bx, 0, mult + "x", { fontSize: "14px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+      const label = this.add.text(bx, -30, mult + "x", { fontSize: "14px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
       rect.on("pointerdown", () => { if (this.paused) this.setSpeed(mult); });
       menu.add([rect, label]);
       speedBtns[mult] = { rect, label };
     });
 
     // --- Resume.
-    const resumeRect = this.add.rectangle(0, 60, 180, 42, 0xffd23f, 1).setInteractive({ useHandCursor: true });
+    const resumeRect = this.add.rectangle(0, 20, 180, 42, 0xffd23f, 1).setInteractive({ useHandCursor: true });
     resumeRect.setStrokeStyle(2, 0x8a6a1f);
-    const resumeLabel = this.add.text(0, 60, "Resume", { fontSize: "16px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    const resumeLabel = this.add.text(0, 20, "Resume", { fontSize: "16px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     resumeRect.on("pointerdown", () => { if (this.paused) this.setPaused(false); });
-    const hint = this.add.text(0, 100, "P resumes too — hunger ticks faster at higher speeds.", { fontSize: "12px", color: "#eaf6ff" }).setOrigin(0.5, 0.5);
-    menu.add([resumeRect, resumeLabel, hint]);
+    // --- Export Save Code: shows the run as a short code (see
+    // scene/savecode.js) — the code IS the save, there is no
+    // localStorage. Clicking it never unpauses, so the pointer
+    // dispatcher still returns early for the click.
+    const exportRect = this.add.rectangle(0, 70, 220, 36, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
+    exportRect.setStrokeStyle(2, 0x8a6a1f);
+    const exportLabel = this.add.text(0, 70, "Export Save Code", { fontSize: "15px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    exportRect.on("pointerdown", () => { if (this.paused) this.showExportPanel(); });
+    const hint = this.add.text(0, 110, "P resumes too — hunger ticks faster at higher speeds.", { fontSize: "12px", color: "#eaf6ff" }).setOrigin(0.5, 0.5);
+    menu.add([resumeRect, resumeLabel, exportRect, exportLabel, hint]);
 
     this.pauseMenu = menu;
     this.pauseMenu.track = track;
@@ -78,6 +86,7 @@ export const pauseMixin = {
     this.pauseMenu.volText = volText;
     this.pauseMenu.speedBtns = speedBtns;
     this.pauseMenu.resumeRect = resumeRect;
+    this.pauseMenu.exportRect = exportRect;
   },
 
   // P key / Pause button. Same guards as the old P handler: never
@@ -98,6 +107,11 @@ export const pauseMixin = {
       this.closeFoodPanel();
       this.resetDescText();
       this.updatePauseMenu();
+    } else {
+      // Resuming also closes the export panel (it floats over the
+      // pause menu — P resumes too, and the code panel must not stay
+      // open over the running game).
+      this.hideExportPanel();
     }
   },
 

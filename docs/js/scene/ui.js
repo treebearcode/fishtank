@@ -249,6 +249,8 @@ export const uiMixin = {
     this.magnetOwned = false;
     this.closeDecorPanel();
     this.closeFoodPanel();
+    this.hideExportPanel();
+    this.hideImportPanel();
     this.pointerSeen = false;
     this.dragFish = null;
     this.dragActive = false;

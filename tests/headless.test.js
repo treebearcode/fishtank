@@ -3534,6 +3534,259 @@ test("traits: hovering a fish shows its trait in the description bar", () => {
 });
 
 // ===========================================================================
+// 18. IMPORT / EXPORT SAVE CODES
+// ===========================================================================
+// A plain state object for codec round-trips (no scene needed).
+function richState(fish) {
+  return {
+    money: 12345.67, totalBanked: 98765.43, fish: fish || [],
+    snail: true, snailUpgraded: true, crab: true, feederOwned: true, feederOn: true,
+    magnetLevel: 3, decorations: { coral: true, chest: true, castle: true },
+    tankUpgraded: true, foodType: "plant", goalComplete: true,
+  };
+}
+function testFish(species, o) {
+  return Object.assign({ species, feeds: 0, hungerSec: 0, tempo: 1.0, trait: "bold", pattern: "plain", hueTint: 0xffffff, hatKind: null, royalGene: false }, o || {});
+}
+// Hunger and tempo are quantized in the code (2s steps, 0.05 steps),
+// so those compare within tolerance; everything else is exact.
+function eqFish(a, b, label) {
+  eq(a.species, b.species, label + " species");
+  eq(a.feeds, b.feeds, label + " feeds");
+  assert(Math.abs(a.hungerSec - b.hungerSec) <= 2, label + " hunger " + a.hungerSec + " vs " + b.hungerSec);
+  assert(Math.abs(a.tempo - b.tempo) <= 0.051, label + " tempo " + a.tempo + " vs " + b.tempo);
+  eq(a.trait, b.trait, label + " trait");
+  eq(a.pattern, b.pattern, label + " pattern");
+  eq(a.hueTint, b.hueTint, label + " hue");
+  eq(a.hatKind, b.hatKind, label + " hat");
+  eq(a.royalGene, b.royalGene, label + " royal gene");
+}
+
+test("savecode: empty tank round-trips, and the code is short", () => {
+  const code = G.encodeSaveCode({ money: 200, totalBanked: 0, fish: [], snail: false, snailUpgraded: false, crab: false, feederOwned: false, feederOn: false, magnetLevel: 0, decorations: { coral: false, chest: false, castle: false }, tankUpgraded: false, foodType: "standard", goalComplete: false });
+  assert(code.length <= 20, "empty code " + code.length + " chars: " + code);
+  const res = G.decodeSaveCode(code);
+  assert(res.ok, "decodes: " + res.reason);
+  eq(res.state.money, 200, "money");
+  eq(res.state.totalBanked, 0, "banked");
+  eq(res.state.fish.length, 0, "no fish");
+  eq(res.state.foodType, "standard", "food type");
+});
+test("savecode: 2-fish starter round-trips within budget", () => {
+  const state = richState([
+    testFish("guppy", { trait: "social", pattern: "stripes", hatKind: "party", hungerSec: 7, tempo: 1.15 }),
+    testFish("guppy", { trait: "shy", pattern: "spots", hueTint: 0xe8f4ff, feeds: 3 }),
+  ]);
+  state.money = 200; state.totalBanked = 0;
+  state.snail = false; state.snailUpgraded = false; state.crab = false;
+  state.feederOwned = false; state.feederOn = false; state.magnetLevel = 0;
+  state.decorations = { coral: false, chest: false, castle: false };
+  state.tankUpgraded = false; state.foodType = "standard"; state.goalComplete = false;
+  const code = G.encodeSaveCode(state);
+  assert(code.length <= 30, "2-fish code " + code.length + " chars: " + code);
+  const res = G.decodeSaveCode(code);
+  assert(res.ok, "decodes: " + res.reason);
+  eq(res.state.money, 200, "money");
+  eq(res.state.fish.length, 2, "two fish");
+  eqFish(state.fish[0], res.state.fish[0], "fish 0");
+  eqFish(state.fish[1], res.state.fish[1], "fish 1");
+});
+test("savecode: full 16-fish tank with a royal fish round-trips within budget", () => {
+  const species = ["guppy", "emberfin", "chomper", "starfish"];
+  const traits = ["greedy", "shy", "bold", "lazy", "social"];
+  const patterns = ["plain", "stripes", "spots", "gradient"];
+  const hats = [null, "party", "tophat", "beanie", "pirate", "flower", "bow"];
+  const fish = [];
+  for (let i = 0; i < 16; i++) {
+    fish.push(testFish(species[i % 4], {
+      feeds: i % 4 === 2 ? 11 : (i * 2) % 9,
+      hungerSec: (i * 3) % 40,
+      tempo: 0.85 + (i % 8) * 0.05,
+      trait: traits[i % 5],
+      pattern: patterns[i % 4],
+      hueTint: [0xfff2e0, 0xffffff, 0xe8f4ff][i % 3],
+      hatKind: hats[i % 7],
+      royalGene: i === 10,
+    }));
+  }
+  const state = richState(fish);
+  const code = G.encodeSaveCode(state);
+  assert(code.length <= 100, "16-fish code " + code.length + " chars: " + code);
+  const res = G.decodeSaveCode(code);
+  assert(res.ok, "decodes: " + res.reason);
+  eq(res.state.money, 12345.67, "money exact to the cent");
+  eq(res.state.totalBanked, 98765.43, "banked exact to the cent");
+  eq(res.state.fish.length, 16, "sixteen fish");
+  eq(res.state.snail, true, "turbo"); eq(res.state.snailUpgraded, true, "turbo speed");
+  eq(res.state.crab, true, "claws");
+  eq(res.state.feederOwned, true, "feeder owned"); eq(res.state.feederOn, true, "feeder on");
+  eq(res.state.magnetLevel, 3, "magnet L3");
+  eq(JSON.stringify(res.state.decorations), JSON.stringify({ coral: true, chest: true, castle: true }), "all decor");
+  eq(res.state.tankUpgraded, true, "tank upgraded");
+  eq(res.state.foodType, "plant", "food type");
+  eq(res.state.goalComplete, true, "goal complete");
+  for (let i = 0; i < 16; i++) eqFish(state.fish[i], res.state.fish[i], "fish " + i);
+  eq(res.state.fish[10].royalGene, true, "royal gene on fish 10");
+  eq(res.state.fish[10].feeds, 11, "royal feeds");
+});
+test("savecode: money and banked saturate at the 24-bit cap instead of wrapping", () => {
+  const code = G.encodeSaveCode(richState([]));
+  const res = G.decodeSaveCode(code);
+  assert(res.ok, "decodes");
+  eq(res.state.money, 12345.67, "under-cap money is exact");
+  const big = G.encodeSaveCode({ money: 999999.99, totalBanked: 555555.55, fish: [], snail: false, snailUpgraded: false, crab: false, feederOwned: false, feederOn: false, magnetLevel: 0, decorations: { coral: false, chest: false, castle: false }, tankUpgraded: false, foodType: "standard", goalComplete: false });
+  const bigRes = G.decodeSaveCode(big);
+  assert(bigRes.ok, "big code decodes");
+  eq(bigRes.state.money, 167772.15, "money saturates at $167,772.15");
+  eq(bigRes.state.totalBanked, 167772.15, "banked saturates too");
+});
+test("savecode: a flipped character, a truncation, and garbage are all rejected", () => {
+  const code = G.encodeSaveCode(richState([testFish("guppy", { feeds: 4, trait: "greedy" })]));
+  // Flip one character in the middle (to a different valid base64url char).
+  const flipped = code.slice(0, 5) + (code[5] === "A" ? "B" : "A") + code.slice(6);
+  const r1 = G.decodeSaveCode(flipped);
+  assert(!r1.ok, "flipped char must be rejected, got " + JSON.stringify(r1));
+  // Truncate: drop the last dotted group.
+  const truncated = code.slice(0, code.lastIndexOf("."));
+  assert(!G.decodeSaveCode(truncated).ok, "truncated code must be rejected");
+  // Garbage, empty, and a bad character.
+  assert(!G.decodeSaveCode("hello world").ok, "garbage rejected");
+  assert(!G.decodeSaveCode("").ok, "empty rejected");
+  assert(!G.decodeSaveCode(code + "!").ok, "bad character rejected");
+  assert(!G.decodeSaveCode(null).ok, "null rejected");
+});
+test("savecode: more than 63 fish refuses to encode", () => {
+  const fish = [];
+  for (let i = 0; i < 64; i++) fish.push(testFish("guppy"));
+  eq(G.encodeSaveCode(richState(fish)), null, "64 fish is too many for the 6-bit count");
+  const ok = [];
+  for (let i = 0; i < 63; i++) ok.push(testFish("guppy"));
+  assert(G.encodeSaveCode(richState(ok)) !== null, "63 fish still encodes");
+});
+test("savecode: scene export → import restores money, fish and helpers", () => {
+  const s = makeScene();
+  s.money = 5432.10;
+  s.totalBanked = 2100.55;
+  s.buySnail(); s.buySnailSpeed(); s.buyCrab(); s.buyOrToggleFeeder();
+  s.buyMagnet(); s.buyMagnet(); s.buyMagnet();
+  s.buyDecoration("coral", G.CONFIG.coralCost);
+  s.buyDecoration("chest", G.CONFIG.chestCost);
+  s.buyDecoration("castle", G.CONFIG.castleCost);
+  s.buyTankUpgrade();
+  s.selectFood("plant");
+  clearLiveFish(s);
+  const royal = s.spawnFish(300, 200, "guppy", { trait: "bold", pattern: "stripes", hueTint: 0xe8f4ff, hatKind: "tophat", feeds: 9, royalGene: true, hungerSec: 12, tempo: 1.1 });
+  const plain = s.spawnFish(500, 250, "emberfin", { trait: "lazy", pattern: "spots", hungerSec: 6, tempo: 0.9 });
+  royal.pregnant = true; royal.pregnantSec = 10; // pregnancy is NOT saved
+  eq(royal.stage, 3, "royal is stage 3 before export");
+  eq(royal.hatKind, "crown", "royal wears the crown before export");
+  const code = s.exportSaveCode();
+  assert(typeof code === "string" && code.length > 0, "export produces a code");
+  const direct = G.decodeSaveCode(code);
+  assert(direct.ok, "exported code decodes");
+  approx(direct.state.money, 5432.10 - 3475, 0.01, "money after all the buys");
+  eq(direct.state.totalBanked, 2100.55, "banked");
+
+  const t = makeTitleScene();
+  const res = t.importSaveCode(code);
+  assert(res.ok, "import succeeds");
+  assert(t.started, "import starts the game");
+  assert(t.startOverlay === null, "title overlay gone after import");
+  approx(t.money, 5432.10 - 3475, 0.01, "money restored");
+  eq(t.totalBanked, 2100.55, "banked restored");
+  eq(t.fish.length, 2, "both fish restored");
+  assert(t.snail && t.snailUpgraded, "turbo + speed restored");
+  assert(t.crab, "claws restored");
+  assert(t.feederOwned && t.feederOn, "feeder restored");
+  eq(t.magnetLevel, 3, "magnet restored");
+  assert(t.decorations.coral && t.decorations.chest && t.decorations.castle, "decor restored");
+  assert(t.tankUpgraded, "tank upgrade restored");
+  eq(t.foodType, "plant", "food type restored");
+  const imp = t.fish.find((f) => f.species === "guppy");
+  eq(imp.stage, 3, "royal stage restored");
+  eq(imp.hatKind, "crown", "royal crown restored");
+  eq(imp.trait, "bold", "royal trait restored");
+  eq(imp.pattern, "stripes", "royal pattern restored");
+  assert(Math.abs(imp.hungerSec - 12) <= 2, "hunger resumes at the saved hunger, got " + imp.hungerSec);
+  assert(!imp.pregnant, "pregnancy does not carry over");
+  eq(t.fish.find((f) => f.species === "emberfin").trait, "lazy", "emberfin trait restored");
+  assert(t.eventTimerSec >= 60 && t.eventTimerSec <= 90, "first event re-rolls 60-90s after load, got " + t.eventTimerSec);
+});
+test("savecode: import of a bad code shows the exact error and does not start", () => {
+  const t = makeTitleScene();
+  const res = t.importSaveCode("nonsense");
+  assert(!res.ok, "bad code rejected");
+  eq(res.error, "That code doesn't look right — check it and try again", "exact error text");
+  assert(!t.started, "game does not start on a bad code");
+  eq(t.fish.length, 0, "no fish spawned");
+  eq(t.money, G.CONFIG.startMoney, "money untouched");
+  // The panel path: Load with nothing pasted shows the same error.
+  t.showImportPanel();
+  assert(t.importPanel.visible, "import panel opens");
+  t.loadImportCode();
+  eq(t.importPanel.errorText.text, "That code doesn't look right — check it and try again", "panel error text");
+  assert(t.importPanel.errorText.visible, "error shown");
+  assert(!t.started, "still on the title screen");
+});
+test("savecode: eggs load as stage-0 babies of their species", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.eggs.push({ species: "emberfin", trait: "bold", royalGene: true });
+  const code = s.exportSaveCode();
+  const t = makeTitleScene();
+  const res = t.importSaveCode(code);
+  assert(res.ok, "import succeeds");
+  eq(t.fish.length, 1, "the egg became one fish");
+  const baby = t.fish[0];
+  eq(baby.species, "emberfin", "egg species");
+  eq(baby.stage, 0, "hatched as a baby");
+  eq(baby.feeds, 0, "no feeds yet");
+  eq(baby.trait, "bold", "inherited trait carried over");
+  eq(baby.royalGene, true, "inherited gene carried over");
+});
+test("savecode: restoring loads all fish even over the cap", () => {
+  const fish = [];
+  for (let i = 0; i < 20; i++) fish.push(testFish("guppy"));
+  const code = G.encodeSaveCode({ money: 5000, totalBanked: 0, fish, snail: false, snailUpgraded: false, crab: false, feederOwned: false, feederOn: false, magnetLevel: 0, decorations: { coral: false, chest: false, castle: false }, tankUpgraded: false, foodType: "standard", goalComplete: false });
+  const t = makeTitleScene();
+  assert(t.importSaveCode(code).ok, "import succeeds");
+  eq(t.fish.length, 20, "all 20 fish restored over the cap");
+  eq(t.maxFishCap(), 16, "cap is still 16 after load");
+  eq(t.buyFish("guppy"), false, "buying is still capped after load");
+});
+test("savecode: a hungry fish keeps its hunger on load (no offline starvation)", () => {
+  const s = makeScene();
+  clearLiveFish(s);
+  s.spawnFish(300, 200, "guppy", { hungerSec: 48, tempo: 1.0 });
+  const code = s.exportSaveCode();
+  const t = makeTitleScene();
+  assert(t.importSaveCode(code).ok, "import succeeds");
+  eq(t.fish.length, 1, "one fish");
+  eq(t.fish[0].hungerSec, 48, "hunger resumes at 48s, not reset");
+  step(t, 1);
+  eq(t.fish.length, 1, "still alive after 1s (49s < 50s death)");
+});
+test("savecode: pause menu has an Export button, title screen has an Import button", () => {
+  const s = makeScene();
+  assert(s.pauseMenu.exportRect !== undefined, "export button exists in the pause menu");
+  s._stubs.keyboardHandlers["keydown-P"]();
+  eq(s.paused, true, "P pauses");
+  s.pauseMenu.exportRect._handlers["pointerdown"]();
+  assert(s.exportPanel.visible, "export panel opens");
+  assert(typeof s._exportCode === "string" && s._exportCode.length > 0, "export produced a code");
+  assert(G.decodeSaveCode(s._exportCode).ok, "panel code decodes");
+  eq(s.exportPanel.codeText.text, s._exportCode, "no-DOM fallback shows the code as text");
+  s.pauseMenu.resumeRect._handlers["pointerdown"]();
+  eq(s.paused, false, "resumed");
+  eq(s.exportPanel.visible, false, "export panel closes on resume");
+  const t = makeTitleScene();
+  assert(t.importBtn !== undefined, "import button exists on the title screen");
+  t.importBtn._handlers["pointerdown"]();
+  assert(t.importPanel.visible, "import panel opens");
+  eq(t.importPanel.errorText.visible, false, "no error yet");
+});
+
+// ===========================================================================
 // Summary.
 // ===========================================================================
 console.log("\n" + passed + " passed, " + failed + " failed, " + (passed + failed) + " total.");

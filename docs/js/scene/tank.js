@@ -32,6 +32,7 @@ import { coinsMixin } from "./coins.js";
 import { lifecycleMixin } from "./lifecycle.js";
 import { inputMixin } from "./input.js";
 import { pauseMixin } from "./pause.js";
+import { savecodeMixin } from "./savecode.js";
 
 export class TankScene extends Phaser.Scene {
   constructor() {
@@ -340,7 +341,15 @@ export class TankScene extends Phaser.Scene {
     const startBtn = this.add.rectangle(480, 340, 220, 56, 0xffd23f, 1).setInteractive({ useHandCursor: true });
     const startLabel = this.add.text(480, 340, "Start", { fontSize: "24px", color: "#12394d", fontStyle: "bold" }).setOrigin(0.5, 0.5);
     startBtn.on("pointerdown", () => this.startGame());
-    this.startOverlay.add([shade, title, tagline, startBtn, startLabel]);
+    // Import Save sits below Start (the title layout is otherwise
+    // untouched) — it opens the import panel, it never starts the
+    // game itself, so the pointer dispatcher still returns early for
+    // the click (see scene/savecode.js).
+    const importBtn = this.add.rectangle(480, 420, 220, 48, 0x2a5a75, 1).setInteractive({ useHandCursor: true });
+    const importLabel = this.add.text(480, 420, "Import Save", { fontSize: "20px", color: "#eaf6ff", fontStyle: "bold" }).setOrigin(0.5, 0.5);
+    importBtn.on("pointerdown", () => this.showImportPanel());
+    this.startOverlay.add([shade, title, tagline, startBtn, startLabel, importBtn, importLabel]);
+    this.importBtn = importBtn;
 
     // --- Goal popup: hidden until the goal is met. Built once here,
     //     shown/hidden by showGoalPopup() / closeGoalPopup(). It pauses
@@ -358,6 +367,11 @@ export class TankScene extends Phaser.Scene {
     gContinueBg.on("pointerdown", () => this.closeGoalPopup());
     this.goalPopup.add([gShade, gPanel, gTitle, gBody, gRestartBg, gRestartLabel, gContinueBg, gContinueLabel]);
 
+    // --- Save-code panels (export in the pause menu, import on the
+    //     title screen — see scene/savecode.js). Built once here,
+    //     hidden until used.
+    this.buildSaveCodeUI();
+
     this.updateShopUI();
     this.updateTopUI();
     this.updateGoalUI();
@@ -368,6 +382,8 @@ export class TankScene extends Phaser.Scene {
   //     has no fish on it. (resetTank() spawns its own starting fish
   //     separately — it does not go through this.)
   startGame() {
+    this.hideImportPanel();
+    this.hideExportPanel();
     this.started = true;
     for (let i = 0; i < CONFIG.startFish; i++) this.spawnFish(300 + i * 360, 200 + i * 60);
     this.startOverlay.destroy();
@@ -426,4 +442,5 @@ Object.assign(TankScene.prototype,
   lifecycleMixin,
   inputMixin,
   pauseMixin,
+  savecodeMixin,
 );
